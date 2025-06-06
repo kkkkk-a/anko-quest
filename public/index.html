@@ -1,11 +1,346 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hello Render</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>オンライン三目並べ (特殊ルール)</title>
+    <style>
+        /* style.css の内容をここに展開 */
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f8ff;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        p.rules { /* ルール説明用のクラスを追加 */
+            color: #555;
+            margin-bottom: 15px;
+            max-width: 600px;
+            line-height: 1.5;
+        }
+
+        #player-info, #player-stats {
+            font-size: 0.9em;
+            color: #444;
+            margin-bottom: 5px;
+        }
+        #player-stats {
+            margin-bottom: 10px;
+        }
+
+        #status-display {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            color: #555;
+            min-height: 1.5em;
+            font-weight: bold;
+        }
+
+        #timer-display {
+            font-size: 1em;
+            margin-bottom: 15px;
+            color: #d9534f; /* Bootstrap danger color for timer */
+            font-weight: bold;
+            min-height: 1.2em;
+        }
+
+
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            background-color: #666;
+            border: 5px solid #666;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5em;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        .cell:hover:not(.x):not(.o) {
+            background-color: #e0e0e0;
+        }
+        .cell.not-my-turn:not(.x):not(.o) { /* 自分のターンでないときはホバー効果を弱める or 無効 */
+            background-color: #f9f9f9; /* 少しだけ色を変えるか、そのまま #fff でも */
+            cursor: not-allowed;
+        }
+        .cell.not-my-turn:hover:not(.x):not(.o) {
+             background-color: #f9f9f9;
+        }
+
+
+        .cell.x {
+            color: #007bff;
+        }
+
+        .cell.o {
+            color: #dc3545;
+        }
+
+        #reset-button {
+            padding: 12px 25px;
+            font-size: 1.1em;
+            color: #fff;
+            background-color: #ffc107;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        #reset-button:hover:not(:disabled) {
+            background-color: #e0a800;
+        }
+        #reset-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 400px) {
+            #game-board {
+                grid-template-columns: repeat(3, 80px);
+                grid-template-rows: repeat(3, 80px);
+            }
+            .cell {
+                width: 80px;
+                height: 80px;
+                font-size: 2.5em;
+            }
+            h1 { font-size: 1.6em; }
+            p.rules { font-size: 0.9em; }
+            #status-display { font-size: 1.1em; }
+            #timer-display { font-size: 0.9em; }
+        }
+    </style>
 </head>
 <body>
-  <h1>Hello from Render + Node.js!</h1>
+    <h1>オンライン三目並べ (特殊ルール版)</h1>
+    <p class="rules">
+        ルール: 各プレイヤーは最大4つまで石を盤上に置けます。<br>
+        5つ目の石を置くと、自分が置いた最も古い石が盤面から消えます。<br>
+        各手番には30秒の制限時間があります。時間切れになると負けです。
+    </p>
+    <div id="player-info">あなたのマーク: <span id="player-symbol">?</span> | あなたのID: <span id="player-id"></span></div>
+    <div id="player-stats">あなたの戦績: <span id="stats-wins">0</span>勝 <span id="stats-losses">0</span>敗 <span id="stats-draws">0</span>分 (計<span id="stats-games">0</span>戦)</div>
+    <div id="status-display">サーバーに接続中...</div>
+    <div id="timer-display"></div>
+    <div id="game-board">
+        <div class="cell" data-cell-index="0"></div>
+        <div class="cell" data-cell-index="1"></div>
+        <div class="cell" data-cell-index="2"></div>
+        <div class="cell" data-cell-index="3"></div>
+        <div class="cell" data-cell-index="4"></div>
+        <div class="cell" data-cell-index="5"></div>
+        <div class="cell" data-cell-index="6"></div>
+        <div class="cell" data-cell-index="7"></div>
+        <div class="cell" data-cell-index="8"></div>
+    </div>
+    <button id="reset-button" disabled>リセットゲーム</button>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // client.js の内容をここに展開
+        document.addEventListener('DOMContentLoaded', () => {
+            const socket = io(); // Socket.IOクライアント初期化
+
+            // --- DOM要素の取得 ---
+            const cells = document.querySelectorAll('.cell');
+            const statusDisplay = document.getElementById('status-display');
+            const resetButton = document.getElementById('reset-button');
+            const playerSymbolDisplay = document.getElementById('player-symbol');
+            const playerIdDisplay = document.getElementById('player-id');
+            const timerDisplay = document.getElementById('timer-display');
+
+            const statsWinsDisplay = document.getElementById('stats-wins');
+            const statsLossesDisplay = document.getElementById('stats-losses');
+            const statsDrawsDisplay = document.getElementById('stats-draws');
+            const statsGamesDisplay = document.getElementById('stats-games');
+
+            let mySymbol = null;
+            let myTurn = false;
+            let gameActive = false;
+            const TIME_LIMIT_SECONDS_CLIENT = 30; // サーバー側の設定と合わせる (本来はサーバーから受け取るのが望ましい)
+
+            // --- 関数定義 ---
+            function updateBoard(boardState) {
+                cells.forEach((cell, index) => {
+                    cell.innerText = boardState[index];
+                    cell.classList.remove('x', 'o');
+                    if (boardState[index]) {
+                        cell.classList.add(boardState[index].toLowerCase());
+                    }
+                });
+            }
+
+            function handleCellClick(event) {
+                if (!gameActive || !myTurn || event.target.innerText !== '') {
+                    console.log("クリック無効:", {gameActive, myTurn, cellText: event.target.innerText});
+                    return;
+                }
+                const cellIndex = parseInt(event.target.getAttribute('data-cell-index'));
+                socket.emit('makeMove', { cellIndex });
+                // myTurn = false; // 手を打ったらサーバーからの応答を待つ (gameStateUpdateで制御)
+                // statusDisplay.innerText = "相手の番です..."; // gameStateUpdateで制御
+                updateTurnVisuals();
+            }
+
+            function updateTurnVisuals() {
+                cells.forEach(cell => {
+                    if (!myTurn || !gameActive) {
+                        cell.classList.add('not-my-turn');
+                    } else {
+                        cell.classList.remove('not-my-turn');
+                    }
+                });
+            }
+
+            // --- イベントリスナー設定 ---
+            cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+            resetButton.addEventListener('click', () => {
+                if (confirm("本当にゲームをリセットしますか？ (戦績は残ります)")) {
+                    socket.emit('resetGameRequest');
+                }
+            });
+
+            // --- Socket.IOイベントハンドラ ---
+            socket.on('connect', () => {
+                playerIdDisplay.innerText = socket.id.substring(0,6) + "...";
+                statusDisplay.innerText = 'サーバーに接続しました。対戦相手を探しています...';
+                timerDisplay.innerText = '';
+                resetButton.disabled = true;
+                // 接続時に戦績を要求するか、サーバーから自動で送られてくるのを待つ
+                // playerStatsはサーバー接続時に自動で送られてくるはず
+            });
+
+            socket.on('waitingForOpponent', (data) => {
+                statusDisplay.innerText = data.message;
+                resetButton.disabled = true;
+                timerDisplay.innerText = '';
+            });
+
+            socket.on('gameStart', (gameState) => {
+                console.log('[Client] Received gameStart:', gameState);
+                mySymbol = gameState.symbols[socket.id];
+                playerSymbolDisplay.innerText = mySymbol;
+                gameActive = gameState.gameActive;
+
+                updateBoard(gameState.board);
+                statusDisplay.innerText = gameState.message;
+                myTurn = (gameState.currentPlayerId === socket.id && gameState.gameActive);
+                resetButton.disabled = !gameActive; // ゲームがアクティブでなければリセット不可にするか検討
+
+                if (!gameActive && gameState.players.length < 2) { // 相手がいない状態で始まった場合など
+                     resetButton.disabled = true;
+                } else {
+                     resetButton.disabled = false;
+                }
+
+                updateTurnVisuals();
+                // タイマー表示は timerUpdate で行うのでここではクリアだけ
+                timerDisplay.innerText = '';
+            });
+
+            socket.on('gameStateUpdate', (gameState) => {
+                console.log('[Client] Received gameStateUpdate:', gameState);
+                gameActive = gameState.gameActive;
+                updateBoard(gameState.board);
+                statusDisplay.innerText = gameState.message; // サーバーからのメッセージを優先
+                myTurn = (gameState.currentPlayerId === socket.id && gameState.gameActive);
+
+                if (!gameActive) { // ゲーム終了時
+                    timerDisplay.innerText = "ゲーム終了";
+                    resetButton.disabled = false; // ゲーム終了後はリセット可能に
+                    if (gameState.winner) {
+                        // statusDisplay は既にサーバーからのメッセージで設定されているはず
+                        // if (gameState.symbols[gameState.winner] === mySymbol) {
+                        //     // statusDisplay.innerText = `あなたの勝ちです！🎉 ${gameState.message}`;
+                        // } else {
+                        //     // statusDisplay.innerText = `あなたの負けです...😢 ${gameState.message}`;
+                        // }
+                    } else { // 引き分けやその他の終了
+                        // statusDisplay.innerText = gameState.message;
+                    }
+                }
+                updateTurnVisuals();
+            });
+
+            socket.on('timerUpdate', (data) => {
+                if (gameActive) {
+                    if (data.currentPlayerId === socket.id) { // 自分のターン
+                        timerDisplay.innerText = `あなたの残り時間: ${data.timeLeft} 秒`;
+                        timerDisplay.style.color = data.timeLeft <= 10 ? 'red' : '#d9534f';
+                    } else { // 相手のターン
+                        timerDisplay.innerText = `相手の残り時間: ${data.timeLeft} 秒`;
+                        timerDisplay.style.color = '#555'; // 通常色
+                    }
+                } else if (timerDisplay.innerText !== "ゲーム終了") { // ゲーム終了メッセージが出ていなければクリア
+                    timerDisplay.innerText = '';
+                }
+            });
+
+
+            socket.on('invalidMove', (data) => {
+                alert(data.message);
+                // myTurn = true; // 不正な手はサーバー側で処理されるので、クライアントは状態変更しない
+                // statusDisplay.innerText = "あなたの番です (前の手は無効)"; // サーバーからのgameStateUpdateを待つ
+                // updateTurnVisuals();
+            });
+
+            socket.on('opponentLeft', (data) => {
+                console.log('[Client] Opponent left:', data);
+                gameActive = false;
+                myTurn = false;
+                statusDisplay.innerText = data.message;
+                timerDisplay.innerText = "対戦相手が退出しました";
+                resetButton.disabled = true; // 新しい相手を待つか、ページリロードを促す
+                updateTurnVisuals();
+                // 必要なら、新しいゲームを始めるためにページリロードを促すメッセージを表示
+                // alert("対戦相手が退出しました。新しいゲームを始めるにはページをリロードしてください。");
+            });
+
+            socket.on('statsUpdate', (stats) => {
+                console.log('[Client] Received statsUpdate:', stats);
+                if (statsWinsDisplay) statsWinsDisplay.innerText = stats.wins;
+                if (statsLossesDisplay) statsLossesDisplay.innerText = stats.losses;
+                if (statsDrawsDisplay) statsDrawsDisplay.innerText = stats.draws;
+                if (statsGamesDisplay) statsGamesDisplay.innerText = stats.gamesPlayed;
+            });
+
+            socket.on('disconnect', () => {
+                statusDisplay.innerText = 'サーバーとの接続が切れました。ページをリロードしてください。';
+                gameActive = false;
+                myTurn = false;
+                timerDisplay.innerText = '';
+                resetButton.disabled = true;
+                updateTurnVisuals();
+            });
+        });
+    </script>
 </body>
 </html>
