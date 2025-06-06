@@ -1,0 +1,12 @@
+{
+  "name": "render-node-template",
+  "version": "1.0.0",
+  "description": "Node.js + Express sample for Render",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
