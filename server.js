@@ -35,14 +35,14 @@ function updatePlayerStats(playerId, result) {
     } else if (result === 'draw') {
         playerStats[playerId].draws++;
     }
-    console.log(`[Stats] Player ${playerId.substring(0,4)} stats updated: ${JSON.stringify(playerStats[playerId])}`);
+
     // クライアントに戦績を通知する場合
     io.to(playerId).emit('statsUpdate', playerStats[playerId]);
 }
 
 
 function initializeGame(roomId, player1Id, player2Id) {
-    console.log(`[Server] Initializing game for room ${roomId} with players ${player1Id} and ${player2Id}`);
+
     rooms[roomId] = {
         board: Array(9).fill(''),
         players: [player1Id, player2Id],
@@ -89,7 +89,7 @@ function clearTurnTimer(roomId) {
         if (turnTimers[roomId].timer) clearTimeout(turnTimers[roomId].timer);
         if (turnTimers[roomId].interval) clearInterval(turnTimers[roomId].interval);
         delete turnTimers[roomId];
-        console.log(`[Server Timer] Timer cleared for room ${roomId}`);
+
     }
 }
 
@@ -103,7 +103,7 @@ function startTurnTimer(roomId, playerId) {
         timeLeft: TIME_LIMIT_SECONDS,
         timer: setTimeout(() => {
             if (rooms[roomId] && rooms[roomId].currentPlayerId === playerId && rooms[roomId].gameActive) {
-                console.log(`[Server Timer] Player ${playerId} in room ${roomId} timed out.`);
+    
                 game.gameActive = false;
                 const winnerId = game.players.find(pId => pId !== playerId);
                 game.winner = winnerId; // 相手の勝ち
@@ -135,12 +135,12 @@ function startTurnTimer(roomId, playerId) {
         currentPlayerId: playerId,
         timeLeft: TIME_LIMIT_SECONDS
     });
-    console.log(`[Server Timer] Timer started for player ${playerId} in room ${roomId}. ${TIME_LIMIT_SECONDS}s remaining.`);
+
 }
 
 
 io.on('connection', (socket) => {
-    console.log('新しいプレイヤーが接続しました:', socket.id);
+
     // 接続時にプレイヤーの統計情報がなければ初期化
     if (!playerStats[socket.id]) {
         playerStats[socket.id] = { wins: 0, losses: 0, draws: 0, gamesPlayed: 0 };
@@ -155,7 +155,6 @@ io.on('connection', (socket) => {
             assignedRoomId = roomId_iter;
             socket.join(roomId_iter);
 
-            console.log(`プレイヤー ${socket.id} がルーム ${assignedRoomId} に参加しました。ゲーム開始準備。`);
             initializeGame(assignedRoomId, rooms[assignedRoomId].players[0], socket.id);
 
             const player1Id = rooms[assignedRoomId].players[0];
@@ -163,7 +162,7 @@ io.on('connection', (socket) => {
 
             io.to(player1Id).emit('gameStart', { ...rooms[assignedRoomId], yourSymbol: rooms[assignedRoomId].symbols[player1Id] });
             io.to(player2Id).emit('gameStart', { ...rooms[assignedRoomId], yourSymbol: rooms[assignedRoomId].symbols[player2Id] });
-            console.log(`ルーム ${assignedRoomId} でゲーム開始。プレイヤーX: ${player1Id.substring(0,4)}, プレイヤーO: ${player2Id.substring(0,4)}`);
+
             break;
         }
     }
@@ -174,7 +173,7 @@ io.on('connection', (socket) => {
         playerRoomMap[socket.id] = newRoomId;
         socket.join(newRoomId);
         socket.emit('waitingForOpponent', { message: '対戦相手を待っています...' });
-        console.log(`プレイヤー ${socket.id} が新しいルーム ${newRoomId} を作成し待機中。`);
+
     }
 
     socket.on('makeMove', (data) => {
@@ -205,19 +204,19 @@ io.on('connection', (socket) => {
 
         game.board[cellIndex] = playerSymbol;
         game.playerMoves[socket.id].push({ index: cellIndex, mark: playerSymbol });
-        console.log(`[Server] Player ${socket.id} (${playerSymbol}) in room ${roomId} placed stone at cell ${cellIndex}. Board: ${game.board}`);
+
 
         if (checkWin(game.board, playerSymbol)) {
             game.winner = socket.id;
             game.gameActive = false;
             game.message = `プレイヤー${playerSymbol} (${socket.id.substring(0,4)}) の勝ちです！🎉`;
-            console.log(`[Server] Player ${socket.id} wins in room ${roomId}.`);
+
             updatePlayerStats(socket.id, 'win');
             if (opponentId) updatePlayerStats(opponentId, 'loss');
         } else if (checkDraw(game.board)) { // このルールでは引き分けの定義が難しい
             game.gameActive = false;
             game.message = `引き分けです！ 🤝`;
-            console.log(`[Server] Draw in room ${roomId}.`);
+          
             updatePlayerStats(socket.id, 'draw');
             if (opponentId) updatePlayerStats(opponentId, 'draw');
         } else {
@@ -232,7 +231,7 @@ io.on('connection', (socket) => {
     socket.on('resetGameRequest', () => {
         const roomId = playerRoomMap[socket.id];
         if (roomId && rooms[roomId] && rooms[roomId].players.length === 2) {
-            console.log(`[Server] Reset game request from ${socket.id} for room ${roomId}.`);
+
             clearTurnTimer(roomId);
 
             const player1Id = rooms[roomId].players[0];
@@ -241,12 +240,12 @@ io.on('connection', (socket) => {
 
             io.to(player1Id).emit('gameStart', { ...rooms[roomId], yourSymbol: rooms[roomId].symbols[player1Id] });
             io.to(player2Id).emit('gameStart', { ...rooms[roomId], yourSymbol: rooms[roomId].symbols[player2Id] });
-            console.log(`ルーム ${roomId} のゲームがリセットされました。Next turn: ${rooms[roomId].currentPlayerId}`);
+
         }
     });
 
     socket.on('disconnect', () => {
-        console.log('プレイヤーが切断しました:', socket.id);
+
         const roomId = playerRoomMap[socket.id];
 
         if (roomId && rooms[roomId]) {
@@ -266,7 +265,7 @@ io.on('connection', (socket) => {
                 if (wasGameActive) { // ゲームがアクティブ中に相手が切断した場合
                     game.winner = remainingPlayerId; // 残ったプレイヤーの勝ち
                     game.message += ` ${remainingPlayerId.substring(0,4)}の不戦勝。`;
-                    console.log(`[Server] Player ${socket.id} disconnected during active game. ${remainingPlayerId} wins by default.`);
+
                     updatePlayerStats(socket.id, 'loss'); // 切断したプレイヤーは負け
                     updatePlayerStats(remainingPlayerId, 'win'); // 残ったプレイヤーは勝ち
                 }
@@ -281,14 +280,14 @@ io.on('connection', (socket) => {
                 // 一旦ルームは残すが、もうゲームはできない状態。新しいゲームは新しいルームで。
             } else {
                 delete rooms[roomId];
-                console.log(`ルーム ${roomId} は空になったため削除されました。`);
+
             }
         }
         // playerRoomMap からの削除は、プレイヤーが再接続時に新しいIDになるため、
         // このIDでの戦績は残るが、新しい接続では新しい戦績となる。
         // もしユーザーアカウントシステムを導入する場合は、socket.idではなくユーザーIDで戦績を管理する。
         // delete playerRoomMap[socket.id]; // roomIdへのマッピングは不要になる
-        console.log(`Player ${socket.id.substring(0,4)} disconnected. Stats: ${JSON.stringify(playerStats[socket.id])}`);
+
         // playerRoomMap の削除は、そのプレイヤーがどのルームにいたかの情報なので、切断時に削除するのが適切。
         if (playerRoomMap[socket.id]) {
             delete playerRoomMap[socket.id];
@@ -296,6 +295,3 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`サーバーがポート ${PORT} で起動しました`);
-});
