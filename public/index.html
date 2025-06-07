@@ -200,7 +200,7 @@
 
             function handleCellClick(event) {
                 if (!gameActive || !myTurn || event.target.innerText !== '') {
-                    console.log("クリック無効:", {gameActive, myTurn, cellText: event.target.innerText});
+
                     return;
                 }
                 const cellIndex = parseInt(event.target.getAttribute('data-cell-index'));
@@ -245,7 +245,7 @@
             });
 
             socket.on('gameStart', (gameState) => {
-                console.log('[Client] Received gameStart:', gameState);
+
                 mySymbol = gameState.symbols[socket.id];
                 playerSymbolDisplay.innerText = mySymbol;
                 gameActive = gameState.gameActive;
@@ -267,7 +267,7 @@
             });
 
             socket.on('gameStateUpdate', (gameState) => {
-                console.log('[Client] Received gameStateUpdate:', gameState);
+
                 gameActive = gameState.gameActive;
                 updateBoard(gameState.board);
                 statusDisplay.innerText = gameState.message; // サーバーからのメッセージを優先
@@ -313,7 +313,7 @@
             });
 
             socket.on('opponentLeft', (data) => {
-                console.log('[Client] Opponent left:', data);
+
                 gameActive = false;
                 myTurn = false;
                 statusDisplay.innerText = data.message;
@@ -325,7 +325,7 @@
             });
 
             socket.on('statsUpdate', (stats) => {
-                console.log('[Client] Received statsUpdate:', stats);
+
                 if (statsWinsDisplay) statsWinsDisplay.innerText = stats.wins;
                 if (statsLossesDisplay) statsLossesDisplay.innerText = stats.losses;
                 if (statsDrawsDisplay) statsDrawsDisplay.innerText = stats.draws;
