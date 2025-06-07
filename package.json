@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A simple Tic Tac Toe game using Node.js, Express, and Socket.IO",
   "main": "index.js",
+  "license": "MIT",
   "scripts": {
     "start": "node index.js"
   },
