@@ -14,19 +14,15 @@ app.get("/", (req, res) => {
 
 // ソケット通信
 io.on("connection", (socket) => {
-  console.log("ユーザー接続");
+
 
   socket.on("chat message", (msg) => {
-    console.log("受信:", msg);
+
     io.emit("chat message", msg); // 全員に送信
   });
 
-  socket.on("disconnect", () => {
-    console.log("ユーザー切断");
-  });
+
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+
