@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>グラフ・タクティクス</title>
+    <link rel="icon" href="icon.png" type="image/png">
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;800&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+    --bg-color: #05050a;
+    --primary: #00f2ff;
+    --accent: #ff0055;
+    --gold: #ffd700;
+    --text: #fff;
+}
+
+body {
+    margin: 0; background: var(--bg-color); color: var(--text);
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+    height: 100vh; overflow: hidden; touch-action: manipulation;
+    user-select: none; -webkit-user-select: none;
+}
+
+.screen {
+    position: absolute; width: 100%; height: 100%;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(circle, #1a1a2e 0%, #000 100%); z-index: 10;
+}
+.screen.active { display: flex; z-index: 20; }
+
+.nav-return-btn {
+    display: inline-block; padding: 8px 16px; border-radius: 10px;
+    background: rgba(0, 210, 255, 0.15); color: #00d2ff;
+    text-decoration: none; font-weight: 600; font-size: 0.85rem;
+    border: 1px solid rgba(0, 210, 255, 0.4);
+    position: absolute; top: 20px; left: 20px; z-index: 100;
+}
+.nav-return-btn:hover { background: rgba(0, 210, 255, 0.3); }
+
+h1 { font-family: 'Orbitron', sans-serif; font-size: 2.2rem; text-shadow: 0 0 15px var(--primary); text-align: center; margin: 0 0 10px 0; }
+.desc { color: #aaa; font-size: 0.8rem; margin-bottom: 20px; text-align: center; }
+
+.btn {
+    width: 260px; padding: 16px; margin: 8px;
+    background: rgba(255,255,255,0.05); border: 2px solid var(--primary); color: var(--primary);
+    font-family: 'Orbitron', sans-serif; font-size: 1rem; cursor: pointer;
+    border-radius: 50px; transition: 0.1s; text-transform: uppercase;
+}
+.btn:active { transform: scale(0.95); background: var(--primary); color: #000; }
+.btn-accent { border-color: var(--accent); color: var(--accent); }
+
+#game-container { position: relative; width: 100vw; height: 100vh; background: #000; overflow: hidden; }
+.turn-counter { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-family: 'Orbitron'; font-size: 1rem; color: #aaa; z-index: 5; text-shadow: 0 2px 2px #000; }
+
+.hud {
+    position: absolute; top: 60px; width: 100%; display: flex; justify-content: space-between;
+    padding: 0 10px; box-sizing: border-box; pointer-events: none; font-family: 'Orbitron', sans-serif; z-index: 5;
+}
+.p-info { 
+    background: rgba(0,0,0,0.6); padding: 8px 10px; border-radius: 8px; 
+    border-left: 4px solid var(--primary); backdrop-filter: blur(4px); width: 46%;
+}
+.p-info.p2 { border-left: none; border-right: 4px solid var(--accent); text-align: right; }
+.score { font-size: 1.2rem; font-weight: bold; color: var(--gold); }
+.axis-info { font-size: 0.6rem; color: #ccc; margin-top: 2px; }
+
+.rps-controls {
+    position: absolute; bottom: 40px; width: 100%;
+    display: flex; justify-content: center; gap: 15px; z-index: 100;
+}
+.rps-btn {
+    width: 75px; height: 75px; border-radius: 50%; border: 3px solid #fff;
+    background: rgba(0,0,0,0.5); color: #fff; font-size: 1.8rem;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; backdrop-filter: blur(5px); transition: 0.1s;
+    box-shadow: 0 0 15px rgba(0,0,0,0.5);
+}
+.rps-btn:active { transform: scale(0.9); background: #fff; color: #000; }
+.rps-btn span { font-size: 0.6rem; font-weight: bold; margin-top: -5px; }
+
+.msg-log { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; z-index: 150; width: 100%; }
+.main-msg { font-size: 2.5rem; font-weight: 900; text-shadow: 0 0 20px #000; display: none; }
+
+.modal {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.9); display: none; flex-direction: column;
+    justify-content: center; align-items: center; z-index: 500;
+}
+.blink { animation: blink 1.5s infinite alternate; }
+@keyframes blink { from { opacity: 0.4; } to { opacity: 1; } }
+
+/* 出した手の比較用 */
+.hand-comp-circle {
+    width: 70px; height: 70px; border-radius: 50%; border: 3px solid #fff;
+    background: rgba(0,0,0,0.8); color: #fff; font-size: 2rem;
+    display: flex; align-items: center; justify-content: center;
+}
+</style>
+</head>
+<body>
+
+<!-- タイトル画面 -->
+<div id="s-title" class="screen active">
+    <a href="https://kkkkk-a.github.io/game-hub/" class="nav-return-btn">HUB</a>
+    <h1>GRAPH<br>TACTICS</h1>
+    <div class="desc">じゃんけん空間制圧ゲーム</div>
+    <button class="btn" onclick="Game.initLocal('cpu')">練習 (VS CPU)</button>
+    <button class="btn" onclick="Game.initLocal('2p')">対面対戦 (LOCAL 2P)</button>
+    <button class="btn btn-accent" onclick="Net.open()">通信対戦 (ONLINE)</button>
+    <button class="btn" style="border-color:#555; color:#aaa; font-size:0.8rem;" onclick="document.getElementById('m-rule').style.display='flex'">ルール解説</button>
+</div>
+
+<!-- ルール解説 -->
+<div id="m-rule" class="modal" onclick="this.style.display='none'">
+    <div style="background:#fff; color:#333; padding:20px; border-radius:15px; max-width:85%; font-size:0.85rem; line-height:1.6;">
+        <h3 style="margin-top:0; color:var(--primary);">空間制圧ルール</h3>
+        ・✊:X(赤), ✌:Y(緑), 🖐:Z(青)軸へ移動<br>
+        ・勝利: 加速移動＆相手にノイズを生成！<br>
+        ・あいこ: 全軸が後退（縮小）<br>
+        ・30ターン後の面積、または面積300到達で勝利！
+        <p style="text-align:center; font-weight:bold; color:var(--accent);">[画面をタップして閉じる]</p>
+    </div>
+</div>
+
+<!-- ネットワークメニュー -->
+<div id="s-net" class="screen">
+    <h2>NETWORK</h2>
+    <div id="net-menu">
+        <button class="btn" onclick="Net.host()">部屋を作る</button>
+        <button class="btn btn-accent" onclick="Net.showGuest()">部屋に入る</button>
+        <button class="btn" style="border-color:#555; color:#aaa;" onclick="location.reload()">戻る</button>
+    </div>
+    <div id="net-host-ui" style="display:none; flex-direction:column; align-items:center;">
+        <div id="qr-area" style="background:#fff; padding:10px; margin:10px; border-radius:5px;"></div>
+        <div>ID: <span id="host-id-text" style="color:var(--primary); font-weight:bold;">---</span></div>
+        <button class="btn" onclick="location.reload()" style="margin-top:20px;">中止</button>
+    </div>
+    <div id="net-guest-ui" style="display:none; flex-direction:column; align-items:center;">
+        <div id="cam-wrapper" style="width:250px; height:250px; background:#000; margin:10px; display:none;"></div>
+        <button class="btn" onclick="Net.startCam()">📷 QRスキャン</button>
+        <input type="text" id="join-id" style="font-size:1.2rem; padding:10px; width:200px; text-align:center; margin:10px; border-radius:5px;" placeholder="招待ID">
+        <button class="btn btn-accent" onclick="Net.joinInput()">接続</button>
+    </div>
+</div>
+
+<!-- ゲーム画面 -->
+<div id="s-game" class="screen" style="padding:0; background:#000;">
+    <div id="game-container"></div>
+    
+    <div class="turn-counter">TURN <span id="cur-turn">1</span> / 30 <span style="color:var(--gold); font-size:0.8rem;">[GOAL:300]</span></div>
+    
+    <div class="hud">
+        <div class="p-info">
+            <div id="p1-label" style="font-size:0.7rem; font-weight:bold; color:var(--primary);">P1 (YOU)</div>
+            <div class="score" id="score-p1">0.00</div>
+            <div class="axis-info">X:<span id="c-r1">0</span> Y:<span id="c-s1">0</span> Z:<span id="c-p1">0</span></div>
+        </div>
+        <div class="p-info p2">
+            <div id="p2-label" style="font-size:0.7rem; font-weight:bold; color:var(--accent);">P2 (CPU)</div>
+            <div class="score" id="score-p2">0.00</div>
+            <div class="axis-info">X:<span id="c-r2">0</span> Y:<span id="c-s2">0</span> Z:<span id="c-p2">0</span></div>
+        </div>
+    </div>
+
+    <div class="msg-log">
+        <div id="hand-comparison" style="display:none; gap:20px; align-items:center; justify-content:center; margin-bottom:15px;">
+            <div id="my-final-hand" class="hand-comp-circle" style="border-color:var(--primary);"></div>
+            <div style="font-size:1.5rem; font-weight:bold; color:#fff;">VS</div>
+            <div id="opp-final-hand" class="hand-comp-circle" style="border-color:var(--accent);"></div>
+        </div>
+        <div id="main-msg" class="main-msg">DRAW</div>
+    </div>
+
+    <div class="rps-controls" id="rps-ui">
+        <div class="rps-btn" style="border-color:#ff4444;" onclick="Game.playHand('r')">✊<span>X軸</span></div>
+        <div class="rps-btn" style="border-color:#44ff44;" onclick="Game.playHand('s')">✌<span>Y軸</span></div>
+        <div class="rps-btn" style="border-color:#4444ff;" onclick="Game.playHand('p')">🖐<span>Z軸</span></div>
+    </div>
+</div>
+
+<!-- 結果画面 -->
+<div id="s-result" class="modal">
+    <h1 id="final-winner">YOU WIN!</h1>
+    <div style="margin:20px; font-size:1.5rem; color:var(--gold);" id="final-stats">AREA: 0.00</div>
+    <button class="btn" onclick="location.reload()">タイトルへ</button>
+</div>
+
+<script>
+/**
+ * GRAPH TACTICS - FINAL LOCAL 2P VERSION
+ */
+
+const Sound = {
+    ctx: null,
+    init() { if(!this.ctx) this.ctx = new (window.AudioContext||window.webkitAudioContext)(); if(this.ctx.state==='suspended') this.ctx.resume(); },
+    play(type) {
+        if(!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.connect(g); g.connect(this.ctx.destination);
+        if(type==='win'){ o.frequency.setValueAtTime(440, t); o.frequency.exponentialRampToValueAtTime(880, t+0.2); g.gain.setValueAtTime(0.1, t); }
+        else if(type==='lose'){ o.frequency.setValueAtTime(220, t); o.frequency.linearRampToValueAtTime(110, t+0.3); g.gain.setValueAtTime(0.1, t); }
+        else { o.frequency.setValueAtTime(150, t); g.gain.setValueAtTime(0.1, t); }
+        o.start(); o.stop(t+0.3);
+    }
+};
+
+const Game = {
+    scene: null, camera: null, renderer: null, controls: null, pathGroup: null,
+    mode: 'local-cpu', role: 'p1', turn: 1, maxTurn: 30, targetArea: 300,
+    isPlaying: false, myHand: null, oppHand: null,
+    
+    p1: { pos: {x:0,y:0,z:0}, history: [{x:0,y:0,z:0}], counts: {r:0,s:0,p:0}, score: 0, color: 0x00f2ff },
+    p2: { pos: {x:0,y:0,z:0}, history: [{x:0,y:0,z:0}], counts: {r:0,s:0,p:0}, score: 0, color: 0xff0055 },
+    
+    initLocal(subMode) { 
+        Sound.init();
+        this.mode = (subMode === '2p') ? 'local-2p' : 'local-cpu';
+        this.role = 'p1';
+        this.start();
+    },
+    initOnline(isHost) { 
+        Sound.init(); this.mode='online'; this.role=isHost?'p1':'p2'; this.start(); 
+    },
+
+    start() {
+        if(typeof THREE === 'undefined') { alert("Three.jsが読み込まれていません。"); return; }
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById('s-game').classList.add('active');
+        
+        // ラベル設定
+        document.getElementById('p1-label').innerText = "P1 (YOU)";
+        document.getElementById('p2-label').innerText = (this.mode === 'local-2p') ? "P2" : (this.mode === 'online') ? "P2 (ONLINE)" : "CPU";
+
+        this.setupThree();
+        this.isPlaying = true;
+        this.updateHUD();
+        this.drawGeometry();
+    },
+
+    setupThree() {
+        const container = document.getElementById('game-container');
+        container.innerHTML = '';
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(this.renderer.domElement);
+
+        this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+
+        this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+        this.scene.add(new THREE.GridHelper(200, 40, 0x444444, 0x222222));
+        
+        const axes = new THREE.AxesHelper(80);
+        axes.position.y = 0.1; 
+        this.scene.add(axes);
+
+        const createLabel = (txt, col, pos) => {
+            const cvs = document.createElement('canvas'); cvs.width = 64; cvs.height = 64;
+            const ctx = cvs.getContext('2d');
+            ctx.fillStyle = col; ctx.font = 'bold 50px Arial'; ctx.textAlign = 'center'; ctx.fillText(txt, 32, 50);
+            const tex = new THREE.CanvasTexture(cvs);
+            const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
+            spr.position.copy(pos); spr.scale.set(10,10,10);
+            return spr;
+        };
+        this.scene.add(createLabel('X', '#ff4444', new THREE.Vector3(85,0,0)));
+        this.scene.add(createLabel('Y', '#44ff44', new THREE.Vector3(0,85,0)));
+        this.scene.add(createLabel('Z', '#4444ff', new THREE.Vector3(0,0,85)));
+
+        this.pathGroup = new THREE.Group();
+        this.scene.add(this.pathGroup);
+
+        this.camera.position.set(50, 50, 50);
+        this.camera.lookAt(0,0,0);
+        
+        const animate = () => {
+            requestAnimationFrame(animate);
+            if(this.controls) this.controls.update();
+            this.renderer.render(this.scene, this.camera);
+        };
+        animate();
+    },
+
+playHand(hand) {
+        if(!this.isPlaying) return;
+        Sound.play('select');
+        
+        if(this.mode === 'online') {
+            document.getElementById('rps-ui').style.display = 'none';
+            this.showMsg("WAITING...", "#aaa");
+            Net.send({ type: 'hand', hand: hand });
+            this.myHand = hand;
+            if(this.oppHand) this.resolveTurn(this.myHand, this.oppHand);
+        } 
+        else if(this.mode === 'local-2p') {
+            if(!this.myHand) {
+                // P1の選択
+                this.myHand = hand;
+                this.showMsg("P2の番です", "var(--accent)");
+                // 一瞬だけ暗くしてP1の指の動きを隠す
+                document.getElementById('rps-ui').style.opacity = "0.2";
+                document.getElementById('rps-ui').style.pointerEvents = "none";
+                
+                setTimeout(() => {
+                    if(this.isPlaying && !this.oppHand) {
+                        document.getElementById('rps-ui').style.opacity = "1";
+                        document.getElementById('rps-ui').style.pointerEvents = "auto";
+                    }
+                }, 500); // 0.5秒後にP2のために明るさを戻す
+            } else {
+                // P2の選択
+                this.oppHand = hand;
+                this.resolveTurn(this.myHand, this.oppHand);
+            }
+        }
+        else {
+            // VS CPU
+            const hands = ['r','s','p'];
+            const cpu = hands[Math.floor(Math.random()*3)];
+            this.resolveTurn(hand, cpu);
+        }
+    },
+    resolveTurn(h1, h2) {
+        document.getElementById('rps-ui').style.display = 'none';
+        
+        const handMap = { r:'✊', s:'✌', p:'🖐' };
+        document.getElementById('my-final-hand').innerText = handMap[h1];
+        document.getElementById('opp-final-hand').innerText = handMap[h2];
+        document.getElementById('hand-comparison').style.display = 'flex';
+
+        const res = this.judge(h1, h2);
+        const isD = (res === 0);
+        this.moveP('p1', h1, res === 1, isD);
+        this.moveP('p2', h2, res === -1, isD);
+
+        if(isD) { this.showMsg("DRAW (-1 ALL)", "#fff"); Sound.play('draw'); }
+        else if(res === 1) { this.showMsg("P1 WIN!", "var(--primary)"); Sound.play('win'); this.glitch('p2'); }
+        else { this.showMsg("P2 WIN", "var(--accent)"); Sound.play('lose'); this.glitch('p1'); }
+
+        this.updateHUD();
+        this.drawGeometry();
+
+    setTimeout(() => {
+        document.getElementById('hand-comparison').style.display = 'none';
+        document.getElementById('main-msg').style.display = "none";
+        
+        if (this.p1.score >= this.targetArea || this.p2.score >= this.targetArea) return this.gameOver();
+        if(this.turn >= this.maxTurn) return this.gameOver();
+        
+        this.turn++;
+        document.getElementById('cur-turn').innerText = this.turn;
+        
+        // ★ ここでボタンを表示し、明るさを100%に戻す
+        const rpsUI = document.getElementById('rps-ui');
+        rpsUI.style.display = 'flex';
+        rpsUI.style.opacity = "1";
+        rpsUI.style.pointerEvents = "auto";
+
+        this.myHand = this.oppHand = null;
+    }, 1800);
+    },
+
+    judge: (a, b) => (a === b) ? 0 : ((a==='r'&&b==='s')||(a==='s'&&b==='p')||(a==='p'&&b==='r')) ? 1 : -1,
+
+    moveP(pId, hand, isW, isD) {
+        const p = this[pId];
+        p.counts[hand]++;
+        if(isD) { p.pos.x-=1; p.pos.y-=1; p.pos.z-=1; }
+        else {
+            const step = 1 + (isW ? p.counts[hand]*0.6 : 0);
+            if(hand==='r') p.pos.x += step;
+            if(hand==='s') p.pos.y += step;
+            if(hand==='p') p.pos.z += step;
+        }
+        p.history.push({...p.pos});
+    },
+
+    glitch(pId) {
+        const p = this[pId];
+        p.history.push({
+            x: p.pos.x + (Math.random()-0.5)*12,
+            y: p.pos.y + (Math.random()-0.5)*12,
+            z: p.pos.z + (Math.random()-0.5)*12
+        });
+    },
+
+    drawGeometry() {
+        if(!this.pathGroup) return;
+        while(this.pathGroup.children.length > 0) {
+            const obj = this.pathGroup.children[0];
+            this.pathGroup.remove(obj);
+            if(obj.geometry) obj.geometry.dispose();
+            if(obj.material) obj.material.dispose();
+        }
+        [this.p1, this.p2].forEach(p => {
+            if(p.history.length < 2) return;
+            const pts = p.history.map(pt => new THREE.Vector3(pt.x, pt.y, pt.z));
+            const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: p.color, linewidth: 3 }));
+            this.pathGroup.add(line);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshBasicMaterial({ color: p.color }));
+            head.position.set(p.pos.x, p.pos.y, p.pos.z);
+            this.pathGroup.add(head);
+        });
+        this.calcScores();
+    },
+
+    calcScores() {
+        const calc = (p) => {
+            let area = 0;
+            for(let i=1; i<p.history.length; i++) {
+                const a = p.history[i-1], b = p.history[i];
+                area += Math.abs(a.x*b.y - b.x*a.y) + Math.abs(a.y*b.z - b.y*a.z) + Math.abs(a.z*b.x - b.z*a.x);
+            }
+            return area / 5;
+        };
+        this.p1.score = calc(this.p1); this.p2.score = calc(this.p2);
+        document.getElementById('score-p1').innerText = this.p1.score.toFixed(2);
+        document.getElementById('score-p2').innerText = this.p2.score.toFixed(2);
+    },
+
+    updateHUD() {
+        ['r','s','p'].forEach(h => {
+            document.getElementById(`c-${h}1`).innerText = this.p1.counts[h];
+            document.getElementById(`c-${h}2`).innerText = this.p2.counts[h];
+        });
+    },
+
+    showMsg(txt, col) {
+        const el = document.getElementById('main-msg');
+        el.innerText = txt; el.style.color = col; el.style.display = 'block';
+    },
+
+    gameOver() {
+        this.isPlaying = false;
+        document.getElementById('s-result').style.display = 'flex';
+        const win = this.p1.score > this.p2.score;
+        document.getElementById('final-winner').innerText = win ? "P1 WIN!" : "P2 WIN!";
+        document.getElementById('final-winner').style.color = win ? "var(--primary)" : "var(--accent)";
+        document.getElementById('final-stats').innerText = `TOTAL AREA: ${this.p1.score.toFixed(2)}`;
+        if(win) Sound.play('win'); else Sound.play('lose');
+    }
+};
+
+const Net = {
+    peer: null, conn: null, scanner: null,
+    open() { 
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); 
+        document.getElementById('s-net').classList.add('active'); 
+    },
+    host() {
+        document.getElementById('net-menu').style.display='none';
+        document.getElementById('net-host-ui').style.display='flex';
+        this.peer = new Peer();
+        this.peer.on('open', id => {
+            document.getElementById('host-id-text').innerText = id;
+            document.getElementById('qr-area').innerHTML = "";
+            new QRCode(document.getElementById("qr-area"), { text: id, width: 150, height: 150 });
+        });
+        this.peer.on('connection', c => { this.conn = c; this.setup(); Game.initOnline(true); });
+    },
+    showGuest() {
+        document.getElementById('net-menu').style.display='none';
+        document.getElementById('net-guest-ui').style.display='flex';
+    },
+    startCam() {
+        const wrap = document.getElementById('cam-wrapper'); wrap.style.display = 'block';
+        this.scanner = new Html5QrcodeScanner("cam-wrapper", { fps: 10, qrbox: 200 });
+        this.scanner.render(id => { this.join(id); this.scanner.clear(); wrap.style.display='none'; });
+    },
+    joinInput() { const id = document.getElementById('join-id').value; if(id) this.join(id); },
+    join(id) {
+        this.peer = new Peer();
+        this.peer.on('open', () => { this.conn = this.peer.connect(id); this.setup(); Game.initOnline(false); });
+    },
+    setup() {
+        this.conn.on('data', d => {
+            if(d.type === 'hand') {
+                Game.oppHand = d.hand;
+                if(Game.myHand) Game.resolveTurn(Game.myHand, Game.oppHand);
+            }
+        });
+        this.conn.on('close', () => location.reload());
+    },
+    send(d) { if(this.conn && this.conn.open) this.conn.send(d); }
+};
+</script>
+</body>
+</html>
