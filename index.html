@@ -1,502 +1,1290 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>グラフ・タクティクス</title>
-    <link rel="icon" href="icon.png" type="image/png">
-    <!-- Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    
-    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;800&family=Orbitron:wght@700&display=swap" rel="stylesheet">
-
-<style>
-:root {
-    --bg-color: #05050a;
-    --primary: #00f2ff;
-    --accent: #ff0055;
-    --gold: #ffd700;
-    --text: #fff;
-}
-
-body {
-    margin: 0; background: var(--bg-color); color: var(--text);
-    font-family: 'M PLUS Rounded 1c', sans-serif;
-    height: 100vh; overflow: hidden; touch-action: manipulation;
-    user-select: none; -webkit-user-select: none;
-}
-
-.screen {
-    position: absolute; width: 100%; height: 100%;
-    display: none; flex-direction: column; align-items: center; justify-content: center;
-    background: radial-gradient(circle, #1a1a2e 0%, #000 100%); z-index: 10;
-}
-.screen.active { display: flex; z-index: 20; }
-
-.nav-return-btn {
-    display: inline-block; padding: 8px 16px; border-radius: 10px;
-    background: rgba(0, 210, 255, 0.15); color: #00d2ff;
-    text-decoration: none; font-weight: 600; font-size: 0.85rem;
-    border: 1px solid rgba(0, 210, 255, 0.4);
-    position: absolute; top: 20px; left: 20px; z-index: 100;
-}
-.nav-return-btn:hover { background: rgba(0, 210, 255, 0.3); }
-
-h1 { font-family: 'Orbitron', sans-serif; font-size: 2.2rem; text-shadow: 0 0 15px var(--primary); text-align: center; margin: 0 0 10px 0; }
-.desc { color: #aaa; font-size: 0.8rem; margin-bottom: 20px; text-align: center; }
-
-.btn {
-    width: 260px; padding: 16px; margin: 8px;
-    background: rgba(255,255,255,0.05); border: 2px solid var(--primary); color: var(--primary);
-    font-family: 'Orbitron', sans-serif; font-size: 1rem; cursor: pointer;
-    border-radius: 50px; transition: 0.1s; text-transform: uppercase;
-}
-.btn:active { transform: scale(0.95); background: var(--primary); color: #000; }
-.btn-accent { border-color: var(--accent); color: var(--accent); }
-
-#game-container { position: relative; width: 100vw; height: 100vh; background: #000; overflow: hidden; }
-.turn-counter { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-family: 'Orbitron'; font-size: 1rem; color: #aaa; z-index: 5; text-shadow: 0 2px 2px #000; }
-
-.hud {
-    position: absolute; top: 60px; width: 100%; display: flex; justify-content: space-between;
-    padding: 0 10px; box-sizing: border-box; pointer-events: none; font-family: 'Orbitron', sans-serif; z-index: 5;
-}
-.p-info { 
-    background: rgba(0,0,0,0.6); padding: 8px 10px; border-radius: 8px; 
-    border-left: 4px solid var(--primary); backdrop-filter: blur(4px); width: 46%;
-}
-.p-info.p2 { border-left: none; border-right: 4px solid var(--accent); text-align: right; }
-.score { font-size: 1.2rem; font-weight: bold; color: var(--gold); }
-.axis-info { font-size: 0.6rem; color: #ccc; margin-top: 2px; }
-
-.rps-controls {
-    position: absolute; bottom: 40px; width: 100%;
-    display: flex; justify-content: center; gap: 15px; z-index: 100;
-}
-.rps-btn {
-    width: 75px; height: 75px; border-radius: 50%; border: 3px solid #fff;
-    background: rgba(0,0,0,0.5); color: #fff; font-size: 1.8rem;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    cursor: pointer; backdrop-filter: blur(5px); transition: 0.1s;
-    box-shadow: 0 0 15px rgba(0,0,0,0.5);
-}
-.rps-btn:active { transform: scale(0.9); background: #fff; color: #000; }
-.rps-btn span { font-size: 0.6rem; font-weight: bold; margin-top: -5px; }
-
-.msg-log { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; z-index: 150; width: 100%; }
-.main-msg { font-size: 2.5rem; font-weight: 900; text-shadow: 0 0 20px #000; display: none; }
-
-.modal {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.9); display: none; flex-direction: column;
-    justify-content: center; align-items: center; z-index: 500;
-}
-.blink { animation: blink 1.5s infinite alternate; }
-@keyframes blink { from { opacity: 0.4; } to { opacity: 1; } }
-
-/* 出した手の比較用 */
-.hand-comp-circle {
-    width: 70px; height: 70px; border-radius: 50%; border: 3px solid #fff;
-    background: rgba(0,0,0,0.8); color: #fff; font-size: 2rem;
-    display: flex; align-items: center; justify-content: center;
-}
-</style>
+    <title>あんこクエスト 〜やる夫の冒険〜</title>
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" defer></script>
+    <!-- ▼ フローチャート描画用ライブラリ ▼ -->
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js" defer></script>
 </head>
+
 <body>
 
-<!-- タイトル画面 -->
-<div id="s-title" class="screen active">
-    <a href="https://kkkkk-a.github.io/game-hub/" class="nav-return-btn">HUB</a>
-    <h1>GRAPH<br>TACTICS</h1>
-    <div class="desc">じゃんけん空間制圧ゲーム</div>
-    <button class="btn" onclick="Game.initLocal('cpu')">練習 (VS CPU)</button>
-    <button class="btn" onclick="Game.initLocal('2p')">対面対戦 (LOCAL 2P)</button>
-    <button class="btn btn-accent" onclick="Net.open()">通信対戦 (ONLINE)</button>
-    <button class="btn" style="border-color:#555; color:#aaa; font-size:0.8rem;" onclick="document.getElementById('m-rule').style.display='flex'">ルール解説</button>
-</div>
+    <div class="app-container" tabindex="-1">
 
-<!-- ルール解説 -->
-<div id="m-rule" class="modal" onclick="this.style.display='none'">
-    <div style="background:#fff; color:#333; padding:20px; border-radius:15px; max-width:85%; font-size:0.85rem; line-height:1.6;">
-        <h3 style="margin-top:0; color:var(--primary);">空間制圧ルール</h3>
-        ・✊:X(赤), ✌:Y(緑), 🖐:Z(青)軸へ移動<br>
-        ・勝利: 加速移動＆相手にノイズを生成！<br>
-        ・あいこ: 全軸が後退（縮小）<br>
-        ・30ターン後の面積、または面積300到達で勝利！
-        <p style="text-align:center; font-weight:bold; color:var(--accent);">[画面をタップして閉じる]</p>
-    </div>
-</div>
+        <!-- ================= グローバルUI・ボタン ================= -->
+        <!-- テスト中断ボタン -->
+        <button id="btn-exit-test" class="btn-danger btn-sm"
+            style="display:none; position:absolute; top:15px; right:110px; z-index:9999;"
+            onclick="exitTestPlay()">テスト中断</button>
 
-<!-- ネットワークメニュー -->
-<div id="s-net" class="screen">
-    <h2>NETWORK</h2>
-    <div id="net-menu">
-        <button class="btn" onclick="Net.host()">部屋を作る</button>
-        <button class="btn btn-accent" onclick="Net.showGuest()">部屋に入る</button>
-        <button class="btn" style="border-color:#555; color:#aaa;" onclick="location.reload()">戻る</button>
-    </div>
-    <div id="net-host-ui" style="display:none; flex-direction:column; align-items:center;">
-        <div id="qr-area" style="background:#fff; padding:10px; margin:10px; border-radius:5px;"></div>
-        <div>ID: <span id="host-id-text" style="color:var(--primary); font-weight:bold;">---</span></div>
-        <button class="btn" onclick="location.reload()" style="margin-top:20px;">中止</button>
-    </div>
-    <div id="net-guest-ui" style="display:none; flex-direction:column; align-items:center;">
-        <div id="cam-wrapper" style="width:250px; height:250px; background:#000; margin:10px; display:none;"></div>
-        <button class="btn" onclick="Net.startCam()">📷 QRスキャン</button>
-        <input type="text" id="join-id" style="font-size:1.2rem; padding:10px; width:200px; text-align:center; margin:10px; border-radius:5px;" placeholder="招待ID">
-        <button class="btn btn-accent" onclick="Net.joinInput()">接続</button>
-    </div>
-</div>
-
-<!-- ゲーム画面 -->
-<div id="s-game" class="screen" style="padding:0; background:#000;">
-    <div id="game-container"></div>
-    
-    <div class="turn-counter">TURN <span id="cur-turn">1</span> / 30 <span style="color:var(--gold); font-size:0.8rem;">[GOAL:300]</span></div>
-    
-    <div class="hud">
-        <div class="p-info">
-            <div id="p1-label" style="font-size:0.7rem; font-weight:bold; color:var(--primary);">P1 (YOU)</div>
-            <div class="score" id="score-p1">0.00</div>
-            <div class="axis-info">X:<span id="c-r1">0</span> Y:<span id="c-s1">0</span> Z:<span id="c-p1">0</span></div>
+        <!-- システムメニュー開閉ボタン -->
+        <div id="system-menu-btn" style="display: none; position: absolute; top: 15px; right: 15px; z-index: 1000;">
+            <button class="btn-cancel btn-sm" onclick="toggleSystemMenu()">⚙️ メニュー</button>
         </div>
-        <div class="p-info p2">
-            <div id="p2-label" style="font-size:0.7rem; font-weight:bold; color:var(--accent);">P2 (CPU)</div>
-            <div class="score" id="score-p2">0.00</div>
-            <div class="axis-info">X:<span id="c-r2">0</span> Y:<span id="c-s2">0</span> Z:<span id="c-p2">0</span></div>
+        <div id="log-btn-container" style="display: none; position: absolute; top: 15px; right: 105px; z-index: 10000;">
+            <button class="btn-info btn-sm" onclick="openLogModal()">📜 LOG</button>
         </div>
-    </div>
-
-    <div class="msg-log">
-        <div id="hand-comparison" style="display:none; gap:20px; align-items:center; justify-content:center; margin-bottom:15px;">
-            <div id="my-final-hand" class="hand-comp-circle" style="border-color:var(--primary);"></div>
-            <div style="font-size:1.5rem; font-weight:bold; color:#fff;">VS</div>
-            <div id="opp-final-hand" class="hand-comp-circle" style="border-color:var(--accent);"></div>
+        <!-- 🌞 時間経過・カレンダー表示 -->
+        <div id="time-display" style="display: none;">
+            <span id="time-icon">🌞</span>
+            <span id="time-day-val">1</span>日目 <span id="time-period-val">昼</span>
         </div>
-        <div id="main-msg" class="main-msg">DRAW</div>
-    </div>
+        
+        <!-- ================= オーバーレイ・モーダル ================= -->
+        <!-- フラッシュエフェクト -->
+        <div id="flash-overlay"></div>
 
-    <div class="rps-controls" id="rps-ui">
-        <div class="rps-btn" style="border-color:#ff4444;" onclick="Game.playHand('r')">✊<span>X軸</span></div>
-        <div class="rps-btn" style="border-color:#44ff44;" onclick="Game.playHand('s')">✌<span>Y軸</span></div>
-        <div class="rps-btn" style="border-color:#4444ff;" onclick="Game.playHand('p')">🖐<span>Z軸</span></div>
+        <!-- 警告エフェクト -->
+        <div id="warning-layer" style="display:none;">
+            <div class="warning-stripe"></div>
+            <div class="warning-text">WARNING</div>
+            <div class="warning-stripe"></div>
+        </div>
+
+        <!-- システムメニュー モーダル -->
+        <div id="system-menu-modal" class="modal" style="display: none;">
+            <div class="modal-content" style="text-align: center;">
+                <h3 style="margin-bottom: 20px;">システムメニュー</h3>
+
+                <!-- 🌟 追加：所持金と宝珠の表示エリア -->
+                <div style="display:flex; justify-content:space-around; background:#f7fafc; padding:10px; border-radius:8px; border:1px solid #cbd5e0; margin-bottom:15px;">
+                    <div><span style="font-size:12px; color:#718096;">所持金</span><br><b id="sys-money-val" style="color:#d69e2e; font-size:16px;">0</b> G</div>
+                    <div><span style="font-size:12px; color:#718096;">新生の宝珠</span><br><b id="sys-orb-val" style="color:#805ad5; font-size:16px;">0</b> 個</div>
+                </div>
+
+                <button class="btn-custom w-100 mb-2" onclick="toggleMsgSpeed()" id="btn-msg-speed">⏩ メッセージ速度: 普通</button>
+<button class="btn-warning w-100 mb-2" onclick="toggleAutoSave()" id="btn-auto-save" style="border-color:#d69e2e; background:#fffaf0; color:#dd6b20;">🔄 オートセーブ: ON</button>
+                <hr style="margin: 10px 0; border-color:#cbd5e0;">
+                <button class="btn-primary w-100 mb-2" onclick="openMemberManagement()">👤 メンバー管理 (装備・秘伝書)</button>
+                <button class="btn-custom w-100 mb-2" onclick="openFlagStatusModal()">📊 ステータス＆フラグ確認</button>
+                <button class="btn-success w-100 mb-2" onclick="manualSave()">💾 進行状況をセーブ</button>
+                <button class="btn-custom w-100 mb-2" onclick="exportSaveImageData()">🖼️ 冒険の書 (画像カード) を出力</button>
+                <button class="btn-info w-100 mb-2" onclick="exportSaveDataToFile()">📤 セーブデータをファイルに出力</button>
+                <button class="btn-warning w-100 mb-2" onclick="document.getElementById('import-save-input').click()">📥
+                    セーブデータをファイルから読込</button>
+                <input type="file" id="import-save-input" style="display:none;" accept=".sav"
+                    onchange="importSaveDataFromFile(event)">
+                <button class="btn-danger w-100 mb-2" onclick="returnToTitle()">🏠 タイトルへ戻る</button>
+                <button class="btn-primary w-100 mt-3" onclick="closeSystemMenu()">▶ ゲームに戻る</button>
+            </div>
+        </div>
+
+        <!-- 📊 ステータス＆フラグ確認 モーダル -->
+        <div id="flag-status-modal" class="modal" style="display: none;">
+            <div class="modal-content"
+                style="max-width: 600px; max-height: 80vh; overflow-y: auto; background:#f7fafc;">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary); margin-bottom: 10px; padding-bottom: 5px;">
+                    <h3 style="margin:0; color:#2b6cb0;">📊 ステータス＆フラグ確認</h3>
+                    <button class="btn-cancel btn-sm" onclick="closeFlagStatusModal()">閉じる (Esc)</button>
+                </div>
+                <div id="flag-status-content"
+                    style="font-size: 13px; line-height: 1.5; display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
+        </div>
+
+        <!-- カスタム読込 モーダル -->
+        <div id="import-modal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <h3>カスタムシナリオ読込</h3>
+                <p>JSONデータを貼り付けてください。</p>
+                <textarea id="import-textarea" placeholder='{"SCENARIO": {...}}'></textarea>
+                <div class="modal-actions mt-3">
+                    <button class="btn-primary w-100" onclick="executeImport()">読み込んで開始</button>
+                    <button class="btn-cancel w-100 mt-2" onclick="closeImportModal()">キャンセル</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="grow-modal" class="modal" style="display: none;">
+            <div class="modal-content" style="max-width: 500px; max-height: 90vh; overflow-y: auto;">
+
+                <!-- 🌟 修正：青い線を削除しました -->
+                <h3 id="grow-title" style="padding-bottom: 5px;">キャラ育成</h3>
+
+                <div id="grow-sp-container"
+                    style="text-align:center; margin: 10px 0; font-weight:bold; font-size: 18px; color:var(--warning-dark);">
+                    残りSP: <span id="grow-sp" style="font-size: 24px;">0</span>
+                </div>
+                <!-- ステータス上昇リスト -->
+                <div id="grow-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+
+                <div id="grow-footer" style="display:flex; gap:10px; margin-top:20px;">
+                    <button class="btn-primary w-100" onclick="confirmGrow()">確定</button>
+                    <button class="btn-cancel w-100" onclick="closeGrowModal()">戻る</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ▼ フローチャート モーダル ▼ -->
+        <div id="flowchart-modal" class="modal" style="display: none; padding: 20px;">
+            <!-- 🌟修正：height: 95% をやめ、上下に余白を持たせる安全な設定に -->
+            <div class="modal-content"
+                style="width: 100%; max-width: 1200px; height: 100%; max-height: calc(100vh - 40px); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; padding: 15px;">
+
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                    <h3 style="margin: 0; color: #2b6cb0;">📊 シナリオ・フローチャート</h3>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span
+                            style="font-size: 11px; font-weight: bold; background: #edf2f7; padding: 5px 10px; border-radius: 4px;">
+                            <span style="color: #38a169;">■</span> スタート &nbsp;
+                            <span style="color: #2d3748;">■</span> エンド &nbsp;
+                            <span style="color: #e53e3e;">■</span> エラー &nbsp;
+                            <span style="color: #a0aec0;">■</span> 孤立
+                        </span>
+                        <button class="btn-danger btn-sm" onclick="runFlowchartDebugger()"
+                            style="box-shadow: 0 0 10px rgba(229,62,62,0.5);">🐞 バグチェック</button>
+                        <button class="btn-info btn-sm" id="btn-toggle-layout" onclick="toggleFlowchartLayout()">🌲
+                            階層表示にする</button>
+                        <button class="btn-cancel btn-sm" onclick="closeFlowchart()">閉じる (Esc)</button>
+                    </div>
+                </div>
+
+                <!-- 🌟修正：描画エリアが確実に高さを確保できるように、flex:1 に加えて min-height と position: relative を設定 -->
+                <div
+                    style="flex: 1; position: relative; border: 2px solid #cbd5e0; border-radius: 8px; background: #f8fafc; overflow: hidden;">
+                    <div id="flowchart-network" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+                    </div>
+                </div>
+
+                <div style="font-size: 12px; color: #718096; margin-top: 8px; text-align: center; font-weight: bold;">
+                    💡 箱（シーン）をクリックすると、エディタのその場所に瞬間移動します。マウスホイールで拡大縮小、ドラッグで移動が可能です。
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 1. タイトル画面 ================= -->
+        <div id="view-title" class="view active">
+            <div class="scroll-area title-center">
+                <h1 class="title-logo">あんこ式 RPG<br><span>〜やる夫の冒険〜</span></h1>
+                <div class="title-menu">
+                    <button class="btn-primary" onclick="startGame()">▶ はじめから</button>
+                    <button class="btn-warning" onclick="openOnlineMenu()">🌐 オンライン対戦</button>
+                    <button class="btn-info" id="btn-load" onclick="loadGame()" style="display: none;">■ つづきから</button>
+                    <button class="btn-custom" onclick="openImportModal()">⚙️ カスタム読込</button>
+                    <button class="btn-success" onclick="openEditor()">📝 エディタ起動</button>
+                    <button class="btn-danger" id="btn-delete" onclick="deleteSaveData()" style="display: none;">✖
+                        データ削除</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 1.5 オンライン対戦メニュー ================= -->
+        <div id="view-online" class="view">
+            <header class="top-header">
+                <h2>🌐 オンライン待合室</h2>
+                <button class="btn-cancel btn-sm" onclick="changeView('view-title')">もどる</button>
+            </header>
+            <div class="scroll-area flex-list">
+                <div style="background:#edf2f7; padding:15px; border-radius:8px; text-align:center;">
+                    <p style="font-weight:bold; color:#2d3748; margin-bottom:10px;">現在のデータ・ハッシュ値</p>
+                    <div id="online-data-hash"
+                        style="font-family:monospace; font-size:24px; color:#e53e3e; letter-spacing:2px;">----</div>
+                    <p style="font-size:11px; color:#718096; margin-top:5px;">※この値が同じ相手としか対戦できません</p>
+                </div>
+
+                <!-- 🌟 ここを追加！：現在の出撃パーティ確認エリア -->
+                <div class="prep-block" style="background:#f7fafc; border-color:#3182ce; margin-top:10px; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-left:4px solid #3182ce; padding-left:8px; margin-bottom:10px;">
+                        <h3 style="border-left:none; padding-left:0; margin-bottom:0;">現在の出撃パーティ</h3>
+                        <button class="btn-cancel btn-sm" onclick="openMemberManagement()" style="background:#4a5568; color:#fff;">編成・装備変更</button>
+                    </div>
+                    <div id="online-party-list" class="flex-list">
+                        <!-- ここにJSでパーティ情報が流し込まれます -->
+                    </div>
+                    <div style="font-size:11px; color:#718096; margin-top:8px;">
+                        ※ 経験値ONのルールではこのステータスで、OFFのルールでは「Lv.1の初期ステータス」に補正されて出撃します。
+                    </div>
+                </div>
+
+                <!-- ホスト側の設定 -->
+                <div class="prep-block">
+                    <h3 style="border-left-color:var(--danger);">部屋を作る（ホスト）</h3>
+                    <div
+                        style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; font-size:12px;">
+                        <label><input type="checkbox" id="pvp-rule-exp" checked> 経験値ON(育成データ使用)</label>
+                        <label><input type="checkbox" id="pvp-rule-res" checked> 耐性(ブレイク)ON</label>
+                        <label><input type="checkbox" id="pvp-rule-attr" checked> 属性相性ON</label>
+                        <label><input type="checkbox" id="pvp-rule-skip" checked> 命中演出スキップ</label>
+                        <label><input type="checkbox" id="pvp-rule-item" checked> 戦闘中アイテム使用ON</label>
+                        <label><input type="checkbox" id="pvp-rule-equip" checked> 戦闘中装備変更ON</label>
+                        <label><input type="checkbox" id="pvp-rule-scout" checked> スカウト(捕獲)ON</label>
+                        <label><input type="checkbox" id="pvp-rule-switch" checked> バトル中いれかえON</label>
+                        <label><input type="checkbox" id="pvp-rule-multi-equip"> 同一アイテム重複装備ON</label>
+                        <div
+                            style="grid-column: 1 / 3; margin-top:5px; display:flex; align-items:center; gap:10px; font-size:11px;">
+                            <span style="white-space:nowrap;">思考制限(秒/0=無制限):</span>
+                            <input type="number" id="pvp-rule-time" value="30" min="0" max="999"
+                                style="padding:2px; width:50px;">
+                            <span style="white-space:nowrap;">ターン制限(0=無制限):</span>
+                            <input type="number" id="pvp-rule-turn" value="20" min="0" max="999"
+                                style="padding:2px; width:50px;">
+                        </div>
+                    </div>
+                    <hr style="margin: 10px 0; border-color:#cbd5e0;">
+                    <label style="color:#c53030; font-weight:bold; cursor:pointer;">
+                        <input type="checkbox" id="pvp-rule-tactical"
+                            onchange="document.getElementById('pvp-tac-settings').style.display = this.checked ? 'block' : 'none'">
+                        ⚔️ タクティカルバトル（盤面）で対戦する
+                    </label>
+                    <div id="pvp-tac-settings"
+                        style="display:none; margin-top:5px; font-size:12px; background:#fff5f5; padding:5px; border:1px solid #fc8181; border-radius:4px;">
+                        <div style="display:flex; gap:5px; margin-bottom:5px;">
+                            <div style="flex:1;"><label>先制の決め方:</label><select id="pvp-tac-init" class="w-100"
+                                    style="padding:2px;">
+                                    <option value="stats">ステータス(技+経)合計</option>
+                                    <option value="host">ホスト確定</option>
+                                    <option value="guest">ゲスト確定</option>
+                                </select></div>
+                            <div style="flex:1;"><label>隣接戦闘ダイス:</label><select id="pvp-tac-dice" class="w-100"
+                                    style="padding:2px;">
+                                    <option value="false">なし(仕掛けた側が先制)</option>
+                                    <option value="true">あり(競り合い)</option>
+                                </select></div>
+                        </div>
+                        <label>マップ構造 (9x9 / #:壁, .:床):</label>
+                        <textarea id="pvp-tac-map" class="w-100" rows="9"
+                            style="font-family:monospace; line-height:1; letter-spacing:2px;">.........&#13;&#10;.........&#13;&#10;.........&#13;&#10;.........&#13;&#10;.........&#13;&#10;.........&#13;&#10;.........&#13;&#10;.........&#13;&#10;.........</textarea>
+                    </div>
+                    <button class="btn-danger w-100" onclick="hostOnlineGame()">部屋を作成＆QRコード表示</button>
+                    <div id="online-qr-container" style="display:none; margin-top:15px; text-align:center;">
+                        <div id="online-qrcode" style="display:inline-block; padding:10px; background:#fff;"></div>
+                        <p style="font-size:12px; margin-top:5px;">相手にこのQRを読ませるか、IDを伝えてください</p>
+                        <input type="text" id="online-host-id" readonly class="w-100"
+                            style="text-align:center; font-family:monospace; font-weight:bold; margin-top:5px;"
+                            onclick="this.select(); document.execCommand('copy'); alert('コピーしました');">
+                    </div>
+                </div>
+
+                <!-- ゲスト側の設定 -->
+                <div class="prep-block">
+                    <h3 style="border-left-color:var(--primary);">部屋に入る（ゲスト）</h3>
+                    <button class="btn-primary w-100 mb-2" onclick="startQRScan()">📷 QRコードをスキャン</button>
+                    <div style="display:flex; gap:5px;">
+                        <input type="text" id="join-host-id" placeholder="ホストIDを入力" style="flex:1;">
+                        <button class="btn-info" onclick="joinOnlineGame()">接続</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 2. エディタ画面 ================= -->
+        <div id="view-editor" class="view">
+
+            <!-- 🌟 ナビゲーションバー（タブボタン群：完全固定） -->
+            <div class="editor-navbar"
+                style="flex-shrink: 0; background: #fff; border-bottom: 2px solid #cbd5e0; padding: 10px 15px; z-index: 90; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                <div class="tabs" style="margin-bottom: 10px; display: flex; gap: 5px; flex-wrap: wrap;">
+                    <button class="tab-btn active" style="flex:1;"
+                        onclick="switchEditorTab(event, 'tab-scenario')">シナリオ</button>
+                    <button class="tab-btn" style="flex:1;" onclick="switchEditorTab(event, 'tab-player')">味方</button>
+                    <button class="tab-btn" style="flex:1;" onclick="switchEditorTab(event, 'tab-enemy')">敵キャラ</button>
+                    <button class="tab-btn" style="flex:1;" onclick="switchEditorTab(event, 'tab-item')">アイテム</button>
+                    <button class="tab-btn" style="flex:1;" onclick="switchEditorTab(event, 'tab-skill')">技</button>
+                </div>
+
+                <!-- 🌟 全タブ共通のコントロールパネル（ここも固定） -->
+                <div id="editor-controls" style="display: flex; gap: 5px; flex-wrap: wrap; align-items: center;">
+    <input type="text" id="editor-search-input" placeholder="🔍 IDや名前、セリフで検索..."
+        style="flex:2; min-width: 150px; padding: 6px; font-size: 12px; border: 1px solid #cbd5e0; border-radius: 4px;"
+        oninput="filterEditorItems()">
+
+    <input type="text" id="new-scene-id" placeholder="新規シーンID"
+        style="display:none; flex:1; min-width: 100px; padding: 6px; font-size: 12px; border: 1px solid #cbd5e0; border-radius: 4px;">
+
+    <button id="btn-editor-add" class="btn-primary btn-sm" onclick="handleEditorAdd()">+ 追加</button>
+    <button id="btn-editor-load" class="btn-info btn-sm" onclick="handleEditorLoad()" title="チュートリアルデータを読込">📥 読込</button>
+
+    <!-- 🌟 修正：全タブで常に表示させるために display:flex; に固定し、IDを変更 -->
+    <div id="global-tools" style="display:flex; gap:2px; margin-left: auto;">
+        <!-- 🌟 シナリオ専用ボタンに .btn-scenario-only を付与 -->
+        <button class="btn-cancel btn-sm btn-scenario-only" onclick="toggleAllScenes(false)">枠閉</button>
+        <button class="btn-cancel btn-sm btn-scenario-only" onclick="toggleAllScenes(true)">枠開</button>
+        
+        <button class="btn-cancel btn-sm" style="background:#718096; color:#fff;" onclick="toggleAllSteps(false)">中閉</button>
+        <button class="btn-cancel btn-sm" style="background:#718096; color:#fff;" onclick="toggleAllSteps(true)">中開</button>
+        
+        <button class="btn-custom btn-sm btn-scenario-only" onclick="openFlowchart()">📊 図</button>
     </div>
 </div>
+            </div>
 
-<!-- 結果画面 -->
-<div id="s-result" class="modal">
-    <h1 id="final-winner">YOU WIN!</h1>
-    <div style="margin:20px; font-size:1.5rem; color:var(--gold);" id="final-stats">AREA: 0.00</div>
-    <button class="btn" onclick="location.reload()">タイトルへ</button>
-</div>
 
-<script>
-/**
- * GRAPH TACTICS - FINAL LOCAL 2P VERSION
- */
+            <!-- 🌟 メインコンテンツ（ここから下だけがスクロールする） -->
+            <div class="editor-layout"
+                style="flex: 1; overflow-y: auto; padding: 15px; display: flex; gap: 20px; align-items: flex-start;">
 
-const Sound = {
-    ctx: null,
-    init() { if(!this.ctx) this.ctx = new (window.AudioContext||window.webkitAudioContext)(); if(this.ctx.state==='suspended') this.ctx.resume(); },
-    play(type) {
-        if(!this.ctx) return;
-        const t = this.ctx.currentTime;
-        const o = this.ctx.createOscillator();
-        const g = this.ctx.createGain();
-        o.connect(g); g.connect(this.ctx.destination);
-        if(type==='win'){ o.frequency.setValueAtTime(440, t); o.frequency.exponentialRampToValueAtTime(880, t+0.2); g.gain.setValueAtTime(0.1, t); }
-        else if(type==='lose'){ o.frequency.setValueAtTime(220, t); o.frequency.linearRampToValueAtTime(110, t+0.3); g.gain.setValueAtTime(0.1, t); }
-        else { o.frequency.setValueAtTime(150, t); g.gain.setValueAtTime(0.1, t); }
-        o.start(); o.stop(t+0.3);
-    }
-};
+                <!-- ＝＝＝ 左側：メイン編集エリア ＝＝＝ -->
+                <div class="editor-main" style="flex: 1; min-width: 0;">
 
-const Game = {
-    scene: null, camera: null, renderer: null, controls: null, pathGroup: null,
-    mode: 'local-cpu', role: 'p1', turn: 1, maxTurn: 30, targetArea: 300,
-    isPlaying: false, myHand: null, oppHand: null,
-    
-    p1: { pos: {x:0,y:0,z:0}, history: [{x:0,y:0,z:0}], counts: {r:0,s:0,p:0}, score: 0, color: 0x00f2ff },
-    p2: { pos: {x:0,y:0,z:0}, history: [{x:0,y:0,z:0}], counts: {r:0,s:0,p:0}, score: 0, color: 0xff0055 },
-    
-    initLocal(subMode) { 
-        Sound.init();
-        this.mode = (subMode === '2p') ? 'local-2p' : 'local-cpu';
-        this.role = 'p1';
-        this.start();
-    },
-    initOnline(isHost) { 
-        Sound.init(); this.mode='online'; this.role=isHost?'p1':'p2'; this.start(); 
-    },
+                    <!-- シナリオタブ -->
+                    <div id="tab-scenario" class="tab-content active">
+                        <div id="scenario-container" class="step-list"></div>
+                    </div>
 
-    start() {
-        if(typeof THREE === 'undefined') { alert("Three.jsが読み込まれていません。"); return; }
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        document.getElementById('s-game').classList.add('active');
-        
-        // ラベル設定
-        document.getElementById('p1-label').innerText = "P1 (YOU)";
-        document.getElementById('p2-label').innerText = (this.mode === 'local-2p') ? "P2" : (this.mode === 'online') ? "P2 (ONLINE)" : "CPU";
+                    <!-- 味方タブ -->
+                    <div id="tab-player" class="tab-content">
+                        <div id="edit-players" class="step-list"></div>
+                    </div>
 
-        this.setupThree();
-        this.isPlaying = true;
-        this.updateHUD();
-        this.drawGeometry();
-    },
+                    <!-- 敵タブ -->
+                    <div id="tab-enemy" class="tab-content">
+                        <div id="edit-enemies" class="step-list"></div>
+                    </div>
 
-    setupThree() {
-        const container = document.getElementById('game-container');
-        container.innerHTML = '';
-        this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
-        container.appendChild(this.renderer.domElement);
+                    <!-- アイテムタブ -->
+                    <div id="tab-item" class="tab-content">
+                        <div id="edit-items" class="step-list"></div>
+                    </div>
 
-        this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.enableDamping = true;
+                    <!-- 技タブ -->
+                    <div id="tab-skill" class="tab-content">
+                        <div id="edit-skills" class="step-list"></div>
+                    </div>
 
-        this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-        this.scene.add(new THREE.GridHelper(200, 40, 0x444444, 0x222222));
-        
-        const axes = new THREE.AxesHelper(80);
-        axes.position.y = 0.1; 
-        this.scene.add(axes);
+                    <!-- 💾 プロジェクト管理・公開パネル（一番下） -->
+                    <div
+                        style="padding: 15px; background: #fff; border: 2px solid #cbd5e0; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                        <label
+                            style="font-weight: bold; color: #2d3748; display: block; margin-bottom: 10px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">💾
+                            プロジェクト管理・公開</label>
+                        <div style="margin-bottom: 15px;">
+                            <label style="font-size: 12px; font-weight: bold;">プロジェクトタイトル (ファイル名になります)</label>
+                            <input type="text" id="project-title-input" class="w-100" placeholder="やる夫の冒険"
+                                style="padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px;">
+                        </div>
 
-        const createLabel = (txt, col, pos) => {
-            const cvs = document.createElement('canvas'); cvs.width = 64; cvs.height = 64;
-            const ctx = cvs.getContext('2d');
-            ctx.fillStyle = col; ctx.font = 'bold 50px Arial'; ctx.textAlign = 'center'; ctx.fillText(txt, 32, 50);
-            const tex = new THREE.CanvasTexture(cvs);
-            const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
-            spr.position.copy(pos); spr.scale.set(10,10,10);
-            return spr;
-        };
-        this.scene.add(createLabel('X', '#ff4444', new THREE.Vector3(85,0,0)));
-        this.scene.add(createLabel('Y', '#44ff44', new THREE.Vector3(0,85,0)));
-        this.scene.add(createLabel('Z', '#4444ff', new THREE.Vector3(0,0,85)));
+                        <div class="project-controls" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <button class="btn-success" onclick="exportProjectToFile()">💾 プロジェクト保存(JSON)</button>
+                            <button class="btn-custom" onclick="exportProjectToImage()">🖼️ 冒険の書(画像)出力</button>
 
-        this.pathGroup = new THREE.Group();
-        this.scene.add(this.pathGroup);
+                            <button class="btn-warning"
+                                onclick="document.getElementById('import-project-input').click()">📂 ファイルから読込</button>
+                            <input type="file" id="import-project-input" style="display:none;" multiple
+                                accept=".json,.png" onchange="importProjectFromFile(event)">
+                            <button class="btn-cancel" style="background:#4a5568; color:#fff;"
+                                onclick="restoreEditorBackup()">🔄 バックアップ復元</button>
+                        </div>
 
-        this.camera.position.set(50, 50, 50);
-        this.camera.lookAt(0,0,0);
-        
-        const animate = () => {
-            requestAnimationFrame(animate);
-            if(this.controls) this.controls.update();
-            this.renderer.render(this.scene, this.camera);
-        };
-        animate();
-    },
+                        <button class="btn-warning w-100 mt-3"
+                            style="padding: 12px; font-size: 16px; font-weight: bold; box-shadow: 0 4px 0 #b7791f !important;"
+                            onclick="editorTestPlay()">▶ 全編テストプレイ開始</button>
 
-playHand(hand) {
-        if(!this.isPlaying) return;
-        Sound.play('select');
-        
-        if(this.mode === 'online') {
-            document.getElementById('rps-ui').style.display = 'none';
-            this.showMsg("WAITING...", "#aaa");
-            Net.send({ type: 'hand', hand: hand });
-            this.myHand = hand;
-            if(this.oppHand) this.resolveTurn(this.myHand, this.oppHand);
-        } 
-        else if(this.mode === 'local-2p') {
-            if(!this.myHand) {
-                // P1の選択
-                this.myHand = hand;
-                this.showMsg("P2の番です", "var(--accent)");
-                // 一瞬だけ暗くしてP1の指の動きを隠す
-                document.getElementById('rps-ui').style.opacity = "0.2";
-                document.getElementById('rps-ui').style.pointerEvents = "none";
-                
-                setTimeout(() => {
-                    if(this.isPlaying && !this.oppHand) {
-                        document.getElementById('rps-ui').style.opacity = "1";
-                        document.getElementById('rps-ui').style.pointerEvents = "auto";
-                    }
-                }, 500); // 0.5秒後にP2のために明るさを戻す
-            } else {
-                // P2の選択
-                this.oppHand = hand;
-                this.resolveTurn(this.myHand, this.oppHand);
-            }
-        }
-        else {
-            // VS CPU
-            const hands = ['r','s','p'];
-            const cpu = hands[Math.floor(Math.random()*3)];
-            this.resolveTurn(hand, cpu);
-        }
-    },
-    resolveTurn(h1, h2) {
-        document.getElementById('rps-ui').style.display = 'none';
-        
-        const handMap = { r:'✊', s:'✌', p:'🖐' };
-        document.getElementById('my-final-hand').innerText = handMap[h1];
-        document.getElementById('opp-final-hand').innerText = handMap[h2];
-        document.getElementById('hand-comparison').style.display = 'flex';
 
-        const res = this.judge(h1, h2);
-        const isD = (res === 0);
-        this.moveP('p1', h1, res === 1, isD);
-        this.moveP('p2', h2, res === -1, isD);
 
-        if(isD) { this.showMsg("DRAW (-1 ALL)", "#fff"); Sound.play('draw'); }
-        else if(res === 1) { this.showMsg("P1 WIN!", "var(--primary)"); Sound.play('win'); this.glitch('p2'); }
-        else { this.showMsg("P2 WIN", "var(--accent)"); Sound.play('lose'); this.glitch('p1'); }
+                        <div style="margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 10px;">
+                            <label style="font-size: 11px;">JSONコード出力（コピー・確認用）</label>
+                            <textarea id="editor-output" readonly
+                                style="height: 60px; font-size: 10px; width: 100%; padding: 5px; border: 1px solid #cbd5e0; border-radius: 4px; background: #f7fafc;"></textarea>
+                            <div style="display: flex; gap: 5px; margin-top: 5px;">
+                                <button class="btn-info btn-sm" style="flex:1;"
+                                    onclick="editorGenerateJSON()">JSONコード生成</button>
+                                <button class="btn-info btn-sm" style="flex:1;"
+                                    onclick="editorCopyJSON()">コードをコピー</button>
+                            </div>
+                        </div>
 
-        this.updateHUD();
-        this.drawGeometry();
+                        <button class="btn-danger w-100 mt-2" onclick="confirmReturnToTitle()"
+                            style="background:#718096; box-shadow: 0 4px 0 #4a5568 !important;">🏠
+                            エディタを終了してタイトルへ</button>
 
-    setTimeout(() => {
-        document.getElementById('hand-comparison').style.display = 'none';
-        document.getElementById('main-msg').style.display = "none";
-        
-        if (this.p1.score >= this.targetArea || this.p2.score >= this.targetArea) return this.gameOver();
-        if(this.turn >= this.maxTurn) return this.gameOver();
-        
-        this.turn++;
-        document.getElementById('cur-turn').innerText = this.turn;
-        
-        // ★ ここでボタンを表示し、明るさを100%に戻す
-        const rpsUI = document.getElementById('rps-ui');
-        rpsUI.style.display = 'flex';
-        rpsUI.style.opacity = "1";
-        rpsUI.style.pointerEvents = "auto";
+                    </div>
+                </div> <!-- /editor-main 終了 -->
 
-        this.myHand = this.oppHand = null;
-    }, 1800);
-    },
+                <!-- ＝＝＝ 右側：サイドバー（制作支援ツール） ＝＝＝ -->
+                <div class="editor-side"
+                    style="width: 300px; flex-shrink: 0; position: sticky; top: 0; max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 5px;">
+                    <div class="aa-ref-panel mb-2"
+                        style="background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e0; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">
+                            <label style="margin:0; font-weight:bold; color:#2b6cb0;">📂 プロジェクト内AA</label>
+                            <button class="btn-info btn-sm" onclick="initInternalAAPickers()">リスト更新</button>
+                        </div>
 
-    judge: (a, b) => (a === b) ? 0 : ((a==='r'&&b==='s')||(a==='s'&&b==='p')||(a==='p'&&b==='r')) ? 1 : -1,
+                        <!-- 5つのカテゴリ別セレクトボックス -->
+                        <div style="display:flex; flex-direction:column; gap:5px; margin-bottom:10px;">
+                            <select id="aa-sel-character" class="w-100 aa-pack-select"
+                                onchange="loadInternalAAPack(this.value, 'CHARACTER')"
+                                style="font-size:12px; padding:4px; border-color:#2b6cb0; border-radius: 4px;">
+                                <option value="">👤 キャラクター...</option>
+                            </select>
+                            <select id="aa-sel-layout" class="w-100 aa-pack-select"
+                                onchange="loadInternalAAPack(this.value, 'LAYOUT')"
+                                style="font-size:12px; padding:4px; border-color:#2b6cb0; border-radius: 4px;">
+                                <option value="">🖼️ レイアウト...</option>
+                            </select>
+                            <select id="aa-sel-item" class="w-100 aa-pack-select"
+                                onchange="loadInternalAAPack(this.value, 'ITEM')"
+                                style="font-size:12px; padding:4px; border-color:#2b6cb0; border-radius: 4px;">
+                                <option value="">🗡️ アイテム...</option>
+                            </select>
+                            <select id="aa-sel-stage" class="w-100 aa-pack-select"
+                                onchange="loadInternalAAPack(this.value, 'STAGE')"
+                                style="font-size:12px; padding:4px; border-color:#2b6cb0; border-radius: 4px;">
+                                <option value="">⛰️ ステージ...</option>
+                            </select>
+                            <select id="aa-sel-effect" class="w-100 aa-pack-select"
+                                onchange="loadInternalAAPack(this.value, 'EFFECT')"
+                                style="font-size:12px; padding:4px; border-color:#2b6cb0; border-radius: 4px;">
+                                <option value="">💥 エフェクト...</option>
+                            </select>
+                        </div>
 
-    moveP(pId, hand, isW, isD) {
-        const p = this[pId];
-        p.counts[hand]++;
-        if(isD) { p.pos.x-=1; p.pos.y-=1; p.pos.z-=1; }
-        else {
-            const step = 1 + (isW ? p.counts[hand]*0.6 : 0);
-            if(hand==='r') p.pos.x += step;
-            if(hand==='s') p.pos.y += step;
-            if(hand==='p') p.pos.z += step;
-        }
-        p.history.push({...p.pos});
-    },
+                        <div id="internal-aa-list"
+                            style="display:flex; flex-wrap:wrap; gap:5px; max-height:120px; overflow-y:auto; margin-bottom:10px; padding:5px; background:#f7fafc; border-radius:4px; border:1px solid #e2e8f0;">
+                            <span style="font-size:11px; color:#718096;">上のリストからパックを選ぶと、ここにAA一覧が出ます</span>
+                        </div>
 
-    glitch(pId) {
-        const p = this[pId];
-        p.history.push({
-            x: p.pos.x + (Math.random()-0.5)*12,
-            y: p.pos.y + (Math.random()-0.5)*12,
-            z: p.pos.z + (Math.random()-0.5)*12
-        });
-    },
+                        <div style="display:flex; gap:5px; align-items:center; margin-bottom:5px;">
+                            <input type="text" id="internal-aa-path" readonly
+                                style="font-size:11px; padding:5px; flex:1; background:#edf2f7; border: 1px solid #cbd5e0; border-radius: 4px;"
+                                placeholder="CHARACTER.YARUO.normal">
+                            <button class="btn-primary btn-sm" onclick="copyInternalAA()">パスコピー</button>
+                            <button class="btn-success btn-sm" onclick="copyInternalAAContent()">AAコピー</button>
+                        </div>
+                        <pre id="internal-aa-preview" class="aa-preview"
+                            style="min-height: 80px; max-height: 200px; background: #1a202c; color: #e2e8f0; padding: 5px; border-radius: 4px; font-size: 10px;"></pre>
+                    </div>
 
-    drawGeometry() {
-        if(!this.pathGroup) return;
-        while(this.pathGroup.children.length > 0) {
-            const obj = this.pathGroup.children[0];
-            this.pathGroup.remove(obj);
-            if(obj.geometry) obj.geometry.dispose();
-            if(obj.material) obj.material.dispose();
-        }
-        [this.p1, this.p2].forEach(p => {
-            if(p.history.length < 2) return;
-            const pts = p.history.map(pt => new THREE.Vector3(pt.x, pt.y, pt.z));
-            const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: p.color, linewidth: 3 }));
-            this.pathGroup.add(line);
-            const head = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 16), new THREE.MeshBasicMaterial({ color: p.color }));
-            head.position.set(p.pos.x, p.pos.y, p.pos.z);
-            this.pathGroup.add(head);
-        });
-        this.calcScores();
-    },
+                    <!-- AAリファレンス -->
+                    <div class="aa-ref-panel mb-2"
+                        style="background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e0; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">
+                            <label style="margin:0; font-weight:bold; color: #dd6b20;">🎨 AAリファレンス</label>
+                            <div>
+                                <button class="btn-info btn-sm" onclick="toggleAATheater()"
+                                    id="btn-theater">全画面</button>
+                                <button class="btn-cancel btn-sm" onclick="toggleAARef(this)">閉じる</button>
+                            </div>
+                        </div>
+                        <div id="aa-ref-body" style="display: block;">
+                            <div class="ref-links mb-1" style="display: flex; gap: 5px;">
+                                <a href="https://aahub.org/mlt" target="_blank" class="btn-cancel btn-sm"
+                                    style="flex:1; text-align:center; text-decoration:none; background:#edf2f7; color:#4a5568;">別窓(AAHUB)</a>
+                                <a href="https://aa.yaruyomi.com/" target="_blank" class="btn-cancel btn-sm"
+                                    style="flex:1; text-align:center; text-decoration:none; background:#edf2f7; color:#4a5568;">別窓(やる読み)</a>
+                            </div>
+                            <div class="iframe-container" id="aa-iframe-container"
+                                style="border: 1px solid #cbd5e0; border-radius: 4px; overflow: hidden;">
+                                <select onchange="document.getElementById('ref-iframe').src = this.value"
+                                    style="font-size:11px; width: 100%; border: none; border-bottom: 1px solid #cbd5e0; padding: 4px; background: #f7fafc;">
+                                    <option value="https://aahub.org/mlt">AAHUB</option>
+                                    <option value="https://aa.yaruyomi.com/">やる読み</option>
+                                </select>
+                                <iframe id="ref-iframe" src="https://aahub.org/mlt" loading="lazy"
+                                    style="width: 100%; height: 300px; border: none;"></iframe>
+                            </div>
+                        </div>
+                    </div>
 
-    calcScores() {
-        const calc = (p) => {
-            let area = 0;
-            for(let i=1; i<p.history.length; i++) {
-                const a = p.history[i-1], b = p.history[i];
-                area += Math.abs(a.x*b.y - b.x*a.y) + Math.abs(a.y*b.z - b.y*a.z) + Math.abs(a.z*b.x - b.z*a.x);
-            }
-            return area / 5;
-        };
-        this.p1.score = calc(this.p1); this.p2.score = calc(this.p2);
-        document.getElementById('score-p1').innerText = this.p1.score.toFixed(2);
-        document.getElementById('score-p2').innerText = this.p2.score.toFixed(2);
-    },
+                    <!-- 画像→AA変換ツール -->
+                    <div class="aa-ref-panel mb-2"
+                        style="background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e0; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">
+                            <label style="margin:0; font-weight:bold; color: #38a169;">🖼️ 画像をAAに変換</label>
+                            <button class="btn-cancel btn-sm" onclick="toggleAAGen(this)"
+                                style="background:#4a5568; color:#fff;">開く</button>
+                        </div>
+                        <div id="aa-gen-body" style="display: none; flex-direction: column; gap: 10px;">
+                            <div id="aa-image-dropzone"
+                                style="border: 2px dashed #cbd5e0; padding: 20px; text-align: center; cursor: pointer; border-radius: 8px; background: #f7fafc; transition: 0.3s;">
+                                <span
+                                    style="font-size: 12px; color: #718096; font-weight: bold;">画像をドロップ<br>またはクリックして選択</span>
+                                <input type="file" id="aa-image-input" accept="image/*" style="display: none;">
+                            </div>
+                            <div
+                                style="display: flex; gap: 5px; align-items: center; background: #edf2f7; padding: 5px; border-radius: 4px;">
+                                <label
+                                    style="font-size: 12px; white-space: nowrap; margin:0; width: 40px; font-weight: bold; color: #4a5568;">タイプ:</label>
+                                <select id="aa-palette-input" class="w-100"
+                                    style="padding: 4px; font-size: 12px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                                    <option value="detailed">高精度 (70段階)</option>
+                                    <option value="simple">シンプル (10段階)</option>
+                                    <option value="ascii">クラシック英数字 (50段階)</option>
+                                    <option value="block">ブロック文字 (5段階)</option>
+                                    <option value="binary">シルエット (白黒2値)</option>
+                                </select>
+                                <!-- 🌟 追加：横幅指定用の input -->
+                                <label
+                                    style="font-size: 12px; white-space: nowrap; margin:0; width: 40px; font-weight: bold; color: #4a5568;">横幅:</label>
+                                <input type="number" id="aa-width-input" value="40"
+                                    style="width: 50px; padding: 4px; font-size: 12px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                            </div>
+                            <button class="btn-primary btn-sm w-100" onclick="generateAAFromImage()">AA変換実行</button>
+                            <textarea id="aa-gen-output" class="aa-preview"
+                                style="height: 100px; font-size: 8px; border: 1px solid #cbd5e0; border-radius: 4px;"
+                                readonly></textarea>
+                            <button class="btn-info btn-sm w-100" onclick="copyGenAA()">AAをコピー</button>
+                        </div>
+                        <canvas id="aa-canvas" style="display:none;"></canvas>
+                    </div>
+                    <!-- 📖 総合データベース（ヘルプパネル） -->
+                    <div class="aa-ref-panel mt-3" style="margin: 0;">
+                        <label style="font-weight: bold; color: #2b6cb0;">📖 システム総合データベース</label>
+                        <div
+                            style="font-size: 11px; color: #4a5568; line-height: 1.5; background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto;">
 
-    updateHUD() {
-        ['r','s','p'].forEach(h => {
-            document.getElementById(`c-${h}1`).innerText = this.p1.counts[h];
-            document.getElementById(`c-${h}2`).innerText = this.p2.counts[h];
-        });
-    },
+                            <details
+                                style="margin-bottom: 8px; background: #fff; padding: 5px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                                <summary style="font-weight: bold; color: #d69e2e; cursor: pointer;">✨
+                                    AAの「パス指定」と「自動表情変化」について</summary>
+                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #cbd5e0;">
+                                    <span style="color:#e53e3e; font-weight:bold;">▼ キャラクターには「パス」を指定しよう！</span><br>
+                                    味方や敵のAA入力欄に、絵を直接貼り付けるのではなく、上のリストから選んだ<b>パス（例:
+                                        CHARACTER.ORIGINAL.YARUO）</b>を貼り付けることを強く推奨します。<br><br>
 
-    showMsg(txt, col) {
-        const el = document.getElementById('main-msg');
-        el.innerText = txt; el.style.color = col; el.style.display = 'block';
-    },
+                                    <span style="color:#2b6cb0; font-weight:bold;">▼ パス指定の絶大なメリット</span><br>
+                                    パスを設定しておくと、ゲームのAIが状況に合わせて自動的に「しっぽ（.通常 など）」を付け足して、AAの表情を切り替えてくれます。<br>
+                                    ・<b>通常時</b>：普通の顔で戦います。<br>
+                                    ・<b>攻撃時</b>：技を使った瞬間に、ドヤ顔（攻撃のAA）になります。<br>
+                                    ・<b>ダメージ/HP0</b>：攻撃を受けた瞬間や倒れた時に、やられ顔（ダメージのAA）になります。<br>
+                                    ・<b>ピンチ時</b>：HPが半分以下、またはブレイクされた時に、焦り顔（ピンチのAA）になります。<br>
+                                    ※直接絵を貼り付けると、この「表情がコロコロ変わる熱いバトル演出」が起きず、ずっと同じ顔のままになってしまいます。
+                                </div>
+                            </details>
 
-    gameOver() {
-        this.isPlaying = false;
-        document.getElementById('s-result').style.display = 'flex';
-        const win = this.p1.score > this.p2.score;
-        document.getElementById('final-winner').innerText = win ? "P1 WIN!" : "P2 WIN!";
-        document.getElementById('final-winner').style.color = win ? "var(--primary)" : "var(--accent)";
-        document.getElementById('final-stats').innerText = `TOTAL AREA: ${this.p1.score.toFixed(2)}`;
-        if(win) Sound.play('win'); else Sound.play('lose');
-    }
-};
+                            <details
+                                style="margin-bottom: 8px; background: #fff; padding: 5px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                                <summary style="font-weight: bold; color: #2b6cb0; cursor: pointer;">⚔️ ステータスとダメージ計算式
+                                </summary>
+                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #cbd5e0;">
+                                    <span style="color:#e53e3e; font-weight:bold;">▼ 基本ステータスの影響</span><br>
+                                    <b>【技(tech)】</b>: 行動順や判定を決める「戦闘ダイス(1d〇)」の最大値を増やします。また、値の10%が「最終攻撃力」に加算されます。<br>
+                                    <b>【経(exp)】</b>: 戦闘ダイスの最大値を増やします。また、値の10%が「最終防御力」に加算されます。<br>
+                                    ※ つまり、<b>戦闘ダイスの最大値 ＝ (技 ＋ 経)</b> となります。<br><br>
 
-const Net = {
-    peer: null, conn: null, scanner: null,
-    open() { 
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); 
-        document.getElementById('s-net').classList.add('active'); 
-    },
-    host() {
-        document.getElementById('net-menu').style.display='none';
-        document.getElementById('net-host-ui').style.display='flex';
-        this.peer = new Peer();
-        this.peer.on('open', id => {
-            document.getElementById('host-id-text').innerText = id;
-            document.getElementById('qr-area').innerHTML = "";
-            new QRCode(document.getElementById("qr-area"), { text: id, width: 150, height: 150 });
-        });
-        this.peer.on('connection', c => { this.conn = c; this.setup(); Game.initOnline(true); });
-    },
-    showGuest() {
-        document.getElementById('net-menu').style.display='none';
-        document.getElementById('net-guest-ui').style.display='flex';
-    },
-    startCam() {
-        const wrap = document.getElementById('cam-wrapper'); wrap.style.display = 'block';
-        this.scanner = new Html5QrcodeScanner("cam-wrapper", { fps: 10, qrbox: 200 });
-        this.scanner.render(id => { this.join(id); this.scanner.clear(); wrap.style.display='none'; });
-    },
-    joinInput() { const id = document.getElementById('join-id').value; if(id) this.join(id); },
-    join(id) {
-        this.peer = new Peer();
-        this.peer.on('open', () => { this.conn = this.peer.connect(id); this.setup(); Game.initOnline(false); });
-    },
-    setup() {
-        this.conn.on('data', d => {
-            if(d.type === 'hand') {
-                Game.oppHand = d.hand;
-                if(Game.myHand) Game.resolveTurn(Game.myHand, Game.oppHand);
-            }
-        });
-        this.conn.on('close', () => location.reload());
-    },
-    send(d) { if(this.conn && this.conn.open) this.conn.send(d); }
-};
-</script>
+                                    <span style="color:#e53e3e; font-weight:bold;">▼ ダメージ計算の仕組み</span><br>
+                                    <b>【最終攻撃力】</b>: 基礎攻撃力 ＋ (技 ÷ 10) ＋ 装備補正<br>
+                                    <b>【最終防御力】</b>: 基礎防御力 ＋ (経 ÷ 10) ＋ 装備補正<br>
+                                    <b>【基本ダメージ】</b>: (最終攻撃力 × 技のダメ倍率) － 最終防御力<br>
+                                    ※ ダメージの最低保証は「1」です。<br><br>
+
+                                    <span style="color:#e53e3e; font-weight:bold;">▼ 耐性ゲージとブレイク</span><br>
+                                    <b>【MAX耐性】</b>: 衝撃・熱量・電磁 それぞれの耐久値です。<br>
+                                    <b>【攻(ATK)】</b>: 攻撃時に、相手の該当耐性ゲージを削る量です。<br>
+                                    <b>【回復(REC)】</b>: 毎ターン終了時に、自身の耐性ゲージが自動回復する量です。<br>
+                                    <b>【復旧(REV)】</b>: 耐性ゲージが0になり「ブレイク」した際、元に戻るまでにかかるターン数です。<br>
+                                    ※ <b>衝撃ブレイク時は戦闘ダイスが強制的に『1』になり</b>、熱量ブレイク時は防御力が『0』に、電磁ブレイク時は受けるダメージが『2倍』になります。
+                                </div>
+                            </details>
+
+                            <details
+                                style="margin-bottom: 8px; background: #fff; padding: 5px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                                <summary style="font-weight: bold; color: #c53030; cursor: pointer;">👿 状態異常の詳細と影響
+                                </summary>
+                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #cbd5e0;">
+                                    <b>【猛毒】</b> 毎ターン 最大HPの10% のダメージ<br>
+                                    <b>【劇毒】</b> 毎ターン 3種の耐性すべてに 最大値の10% のダメージ<br>
+                                    <b>【腐敗】</b> 相手から受ける全属性攻撃の相性が 1段階悪化する<br>
+                                    <b>【凍結】</b> 自身の回避判定時、相手の命中ダイス補正に +3<br>
+                                    <b>【凍傷】</b> 自身の防御力(ベース防+経験/10)が 半減する<br>
+                                    <b>【麻痺】</b> 自身の攻撃時、命中ダイス補正に -3<br>
+                                    <b>【火傷】</b> 毎ターン HPに 20 の固定ダメージ<br>
+                                    <b>【炎上】</b> 毎ターン 3種の耐性すべてに 10 の固定ダメージ<br>
+                                    <b>【睡眠】</b> 戦闘ダイスの出目が半減し、回避や反撃が一切できない<br>
+                                    <b>【混乱】</b> 戦闘ダイス勝利時、50%の確率で自身に20ダメージ<br>
+                                    <b>【出血】</b> 受けた際の最終HPダメージが 2倍 になる<br>
+                                    <b>【硬化】</b> 自身の防御力(ベース防+経験/10)が 2倍 になる<br>
+                                    <b>【溺水】</b> 技を使用した際の「反動ダメージ」が 2倍 になる<br>
+                                    <b>【魅了】</b> 自身の攻撃が、クリティカル(出目10)以外すべて外れる<br>
+                                    <b>【封印】</b> 戦闘中、アイテム（どうぐ）が使用できなくなる<br>
+                                    <b>【鈍足】</b> パーティバトル時の行動優先順位が最後尾になる<br>
+                                    <b>【俊足】</b> パーティバトル時の行動優先順位が最速になる<br>
+                                    <b>【集中】</b> 自身の攻撃時、命中ダイス補正に +1<br>
+                                    <b>【反転】</b> 戦闘ダイスの勝敗と、パーティバトルの行動順が「逆転」する<br>
+                                    <b>【石化】</b> 戦闘ダイスが常に0になり、反撃も回避も一切できない<br>
+                                    <b>【挑発】</b> 技やアイテムが使えず、通常攻撃しか出せなくなる<br>
+                                    <b>【老化】</b> 毎ターンの耐性ゲージ自動回復値（REC）が 半減 する<br>
+                                    <b>【守護】</b> 耐性ゲージへのダメージをすべて無効化する<br>
+                                    <b>【無敵】</b> HPへのダメージをすべて無効化する<br>
+                                    <b>【停滞】</b> ブレイク状態からの復旧に必要なターン数が 2倍 になる<br>
+                                    <b>【好戦】</b> 自身が与えるHPダメージが 2倍 になる<br>
+                                    <b>【例外】</b> 直前に使用した技が使用不可になる<br>
+                                    <b>【反復】</b> 直前に使用した技しか使用できなくなる<br>
+                                    <b>【破滅】</b> 付与から3ターン経過後、確実に即死する<br>
+                                    <b>【必中】</b> 自身も相手も、すべての攻撃が必中になる<br>
+                                    <b>【脆弱】</b> 自身が受ける全属性攻撃が「弱点(2倍)」扱いになる<br>
+                                    <b>【堅牢】</b> 自身が受ける全属性攻撃が「無効(0)」扱いになる<br>
+                                    <b>【不動】</b> 技を使用した際の「反動ダメージ」が 0 になる
+                                </div>
+                            </details>
+
+                            <details
+                                style="margin-bottom: 8px; background: #fff; padding: 5px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                                <summary style="font-weight: bold; color: #805ad5; cursor: pointer;">🔮 状態異常の対応属性
+                                </summary>
+                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #cbd5e0;">
+                                    <span style="color:#718096;">※付与率：弱点(100%) / 普通(75%) / 半減(50%) / 激減(25%) /
+                                        無効等(0%)<br>
+                                        （特性「じゅばく」を持っていれば耐性を無視して常に100%付与）</span><br>
+                                    <b>【火炎】</b> 火傷, 炎上, 好戦<br>
+                                    <b>【電撃】</b> 麻痺<br>
+                                    <b>【氷結】</b> 凍結, 凍傷<br>
+                                    <b>【疾風】</b> 俊足<br>
+                                    <b>【水流】</b> 溺水, 停滞<br>
+                                    <b>【大地】</b> 腐敗, 硬化, 石化, 堅牢<br>
+                                    <b>【爆破】</b> 破滅, 脆弱<br>
+                                    <b>【暗黒】</b> 封印, 老化<br>
+                                    <b>【波動】</b> 反転, 例外, 反復<br>
+                                    <b>【白光】</b> 集中, 守護, 無敵, 必中<br>
+                                    <b>【神秘】</b> 睡眠<br>
+                                    <b>【霊気】</b> 混乱, 魅了, 不動<br>
+                                    <b>【重力】</b> 鈍足<br>
+                                    <b>【格闘】</b> 出血, 挑発<br>
+                                    <b>【草花】</b> 猛毒, 劇毒
+                                </div>
+                            </details>
+
+                            <details
+                                style="margin-bottom: 8px; background: #fff; padding: 5px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                                <summary style="font-weight: bold; color: #e67e22; cursor: pointer;">⚡ 技・アイテムの特殊効果
+                                </summary>
+                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #cbd5e0;">
+                                    <span style="color:#2b6cb0; font-weight:bold;">▼ 技の「規格外の特殊効果」</span><br>
+                                    <b>痛み分け (sync_hp):</b> 対象のHP割合を、自分と同じパーセンテージに強制変更します（ボスには無効）。<br>
+                                    <b>耐性同調 (sync_res):</b> 対象の3種の耐性割合を、自分と同じパーセンテージに落とし込みます（ボスには無効）。<br>
+                                    <b>異常転移 (transfer_status):</b> 自身が受けている状態異常を消し、対象に押し付けます（ボスには無効）。<br>
+                                    <b>戦線離脱 (escape_battle):</b> 戦闘を確実に終了させます。敵が使った場合は「逃げ去った」扱いになり、経験値等は入りません。<br>
+                                    <b>1ターン溜める (charge_1):</b> 1ターン目は「力を溜めている」だけで終了し、2ターン目に発動します。<br>
+                                    <b>使用後行動不能 (recharge_1):</b> 発動した次のターンは「反動で動けない」状態になりパスされます。<br><br>
+
+                                    <span style="color:#2b6cb0; font-weight:bold;">▼ 消費アイテムの「特殊効果」</span><br>
+                                    <b>heal:</b> 指定した効果値の分だけHPを回復し、死者であれば蘇生（HP1以上）させます。<br>
+                                    <b>rec_res:</b> 3つの耐性ゲージのブレイク状態を解除し、全回復させます。<br>
+                                    <b>damage_fixed:</b> 相手の防御力や耐性を無視して、指定した効果値の固定ダメージを与えます。<br>
+                                    <b>buff:</b> バトル中のみ、味方全員の「技・経・攻・防」を指定した効果値分だけ底上げします。
+                                </div>
+                            </details>
+
+                            <details
+                                style="background: #fff; padding: 5px; border: 1px solid #cbd5e0; border-radius: 4px;">
+                                <summary style="font-weight: bold; color: #38a169; cursor: pointer;">⚙️ 装備のオート発動と予約変数
+                                </summary>
+                                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #cbd5e0;">
+                                    <span style="color:#2b6cb0; font-weight:bold;">▼ 装備の「自動発動」</span><br>
+                                    ※条件を満たすと、その装備品を1つ消費して効果が自動発動します。<br>
+                                    <b>on_death:</b> HPが0になるダメージを受けた時、HPを1残して生き耐えます（食いしばり）。<br>
+                                    <b>on_weak:</b> 弱点属性の攻撃を受けた時、即座に3種の耐性ゲージをすべて全回復します（弱点保険）。<br>
+                                    <b>on_status:</b> 状態異常を付与された瞬間、即座にそれを治療します。<br>
+                                    <b>on_break_〇〇:</b> 指定した属性がブレイクされた瞬間、その属性の耐性を全回復します。<br>
+                                    <b>on_break:</b> いずれかの耐性がブレイクされた時、全耐性を回復します。代償として「付与する状態異常」を設定できます。<br><br>
+
+                                    <span style="color:#2b6cb0; font-weight:bold;">▼ フラグ確認で使える「予約変数」</span><br>
+                                    <b>day</b> : 現在の「日目」の数値が入っています。<br>
+                                    <b>timePeriod</b> : 現在の「時間帯」の数値が入っています（0=朝, 1=昼, 2=夕, 3=夜）。<br>
+                                    ※これを使って、「3日目の夜にだけ開く店」などが作れます。
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </div> <!-- /editor-side 終了 -->
+
+            </div> <!-- /editor-layout 終了 -->
+        </div> <!-- /view-editor 終了 -->
+        <!-- データ補完用リスト -->
+        <datalist id="enemy-list"></datalist>
+        <datalist id="scene-list"></datalist>
+        <datalist id="player-id-list"></datalist>
+        <datalist id="skill-list"></datalist>
+        <datalist id="char-list">
+            <option value="やる夫">
+            <option value="やらない夫">
+            <option value="できる夫">
+            <option value="やる実">
+            <option value="システム">
+            <option value="村人">
+            <option value="魔王">
+        </datalist>
+
+        <!-- ================= 3. ストーリー画面 ================= -->
+        <div id="view-story" class="view story-bg">
+            <div class="story-field scroll-area">
+                <pre class="aa-display" id="story-aa"></pre>
+
+                <div id="story-choices" class="story-center-ui" style="display: none;"></div>
+                <div id="story-dice-area" class="story-center-ui" style="display: none;">
+                    <div class="dice-label" id="story-dice-inst">運命のダイスロール！</div>
+
+                    <!-- 🌟 追加：数字表示エリアと計算式（バトル側と構造を統一） -->
+                    <div class="dice-value mx-auto" id="story-stat-dice-val"
+                        style="width: 120px; height: 80px; line-height: 74px; font-size: 48px; border: 3px solid #1a202c; border-radius: 8px;">
+                        ?</div>
+                    <div id="story-stat-dice-formula"
+                        style="font-size: 12px; color: #a0aec0; text-align: center; margin-top: 5px; margin-bottom: 15px;">
+                    </div>
+
+                    <button id="btn-roll-story" class="btn-warning mt-3 w-100"
+                        style="padding:20px; font-size:20px; box-shadow: 0 6px 0 #b7791f !important;"
+                        onclick="executeStatRoll()">ダイスを振る！</button>
+
+                    <!-- 🌟 修正：バトル側とのID重複を回避するため "story-" を付与 -->
+                    <div id="story-stat-roll-actions" style="display:none; width:100%; gap:10px; margin-top:15px;">
+                        <button id="story-btn-stat-accept" class="btn-primary w-100"
+                            style="padding:15px; font-size:18px;" onclick="acceptStatRoll()">決定</button>
+                        <button id="story-btn-stat-reroll" class="btn-cancel w-100"
+                            onclick="retryStatRoll()">振り直す</button>
+                    </div>
+                </div>
+
+                <div class="message-box" id="story-message-box" onclick="skipAnimations(); nextStory();">
+                    <div id="story-speaker"></div>
+                    <div id="story-text"></div>
+                    <div class="click-indicator" id="story-indicator">▼</div>
+                </div>
+            </div>
+        </div> <!-- 👈 🌟これ（#view-story の閉じタグ）をここに追加！！ -->
+
+        <!-- ================= マップ(2D移動) 画面 ================= -->
+        <div id="view-map" class="view" style="position: relative; background: #000; overflow: hidden;">
+                <!-- マップ描画領域 -->
+                <div id="map-grid-container" class="scroll-area"
+                    style="display: flex; justify-content: center; align-items: center; padding: 0;">
+                    <div id="map-grid"
+                        style="position: relative; background: #2d3748; box-shadow: 0 0 20px rgba(0,0,0,0.8);"></div>
+                </div>
+
+                <!-- スマホ用 バーチャルパッド（十字キー＆Aボタン） -->
+                <div id="virtual-pad"
+                    style="position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; pointer-events: none; z-index: 100;">
+                    <!-- 十字キー -->
+                    <div
+                        style="display: grid; grid-template-columns: 50px 50px 50px; grid-template-rows: 50px 50px 50px; gap: 5px; pointer-events: auto;">
+                        <div></div>
+                        <button class="btn-cancel" style="opacity:0.7; font-size:18px; touch-action: none;"
+                            onpointerdown="event.preventDefault(); startMapMove(0, -1)"
+                            onpointerup="event.preventDefault(); stopMapMove()"
+                            onpointerleave="stopMapMove()">▲</button>
+                        <div></div>
+
+                        <button class="btn-cancel" style="opacity:0.7; font-size:18px; touch-action: none;"
+                            onpointerdown="event.preventDefault(); startMapMove(-1, 0)"
+                            onpointerup="event.preventDefault(); stopMapMove()"
+                            onpointerleave="stopMapMove()">◀</button>
+
+                        <button class="btn-cancel" style="opacity:0.7; font-size:18px; touch-action: none;"
+                            onpointerdown="event.preventDefault(); startMapMove(0, 1)"
+                            onpointerup="event.preventDefault(); stopMapMove()"
+                            onpointerleave="stopMapMove()">▼</button>
+
+                        <button class="btn-cancel" style="opacity:0.7; font-size:18px; touch-action: none;"
+                            onpointerdown="event.preventDefault(); startMapMove(1, 0)"
+                            onpointerup="event.preventDefault(); stopMapMove()"
+                            onpointerleave="stopMapMove()">▶</button>
+                    </div>
+                    <!-- A(アクション)ボタン -->
+                    <div style="display: flex; align-items: flex-end; pointer-events: auto;">
+                        <button class="btn-danger"
+                            style="width: 70px; height: 70px; border-radius: 50%; opacity:0.8; font-size: 24px; font-weight:bold; box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important; touch-action: none;"
+                            onpointerdown="event.preventDefault(); actionMap()">A</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= アクションミニゲーム（釣り・採掘）画面 ================= -->
+            <div id="view-action-game" class="view"
+                style="background: #2d3748; justify-content:center; align-items:center;">
+                <div
+                    style="background: #1a202c; border: 4px solid #4a5568; border-radius: 12px; width: 90%; max-width: 400px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); text-align: center;">
+                    <h2 id="ag-title" style="color: #ecc94b; margin-bottom: 10px;">⚡ アクション</h2>
+                    <div id="ag-desc" style="font-size:12px; color:#a0aec0; margin-bottom: 20px;">操作説明がここに入ります</div>
+
+                    <!-- 🎯 1. ゲージ・モード枠 -->
+                    <div id="ag-gauge-container"
+                        style="display:none; position:relative; width:100%; height:30px; background:#4a5568; border-radius:15px; border:2px solid #718096; overflow:hidden; margin-bottom: 20px;">
+                        <div id="ag-hit-zone"
+                            style="position:absolute; top:0; left:40%; width:20%; height:100%; background:rgba(56,161,105,0.8); border-left:2px solid #fff; border-right:2px solid #fff; box-sizing:border-box;">
+                        </div>
+                        <div id="ag-cursor"
+                            style="position:absolute; top:-2px; left:0%; width:10px; height:30px; background:#ecc94b; border:2px solid #000; border-radius:5px; transform:translateX(-50%); box-shadow:0 0 10px #ecc94b;">
+                        </div>
+                    </div>
+
+                    <!-- ⚡ 2. QTE・モード枠 -->
+                    <div id="ag-qte-container"
+                        style="display:none; position:relative; width:100%; height:120px; background:#2d3748; border-radius:8px; border:2px dashed #718096; margin-bottom: 20px; overflow:hidden;">
+                        <div
+                            style="position:absolute; inset:0; display:flex; justify-content:center; align-items:center; color:#4a5568; font-weight:bold;">
+                            ⚠ 集中しろ...</div>
+                        <button id="ag-qte-target" class="btn-danger"
+                            style="display:none; position:absolute; width:60px; height:60px; border-radius:50%; font-size:12px; box-shadow:0 0 15px #e53e3e !important; z-index:10;"
+                            onmousedown="hitQTE(event)" ontouchstart="hitQTE(event)">押せ!</button>
+                    </div>
+
+                    <!-- 💢 3. 連打・モード枠 -->
+                    <div id="ag-mash-container" style="display:none; width:100%; margin-bottom: 20px;">
+                        <div style="font-size:24px; font-weight:bold; color:#e53e3e; margin-bottom:5px;">残り: <span
+                                id="ag-mash-time">5.0</span>秒</div>
+                        <div
+                            style="position:relative; width:100%; height:20px; background:#4a5568; border-radius:10px; overflow:hidden; border:2px solid #fff;">
+                            <div id="ag-mash-bar"
+                                style="height:100%; width:0%; background:linear-gradient(90deg, #ecc94b, #e53e3e); transition:width 0.1s;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🧩 4. 簡易パズル・モード枠 -->
+                    <div id="ag-tetris-container"
+                        style="display:none; flex-direction:column; align-items:center; margin-bottom: 20px;">
+                        <div style="display:grid; grid-template-columns:repeat(5, 20px); grid-template-rows:repeat(12, 20px); gap:2px; background:#000; padding:4px; border:2px solid #a0aec0;"
+                            id="ag-tetris-grid">
+                            <!-- JSでマスを生成 -->
+                        </div>
+                        <div style="display:flex; gap:10px; margin-top:10px; width:100%; justify-content:center;">
+                            <button class="btn-cancel" style="width:50px; height:40px; font-size:18px;"
+                                onclick="moveTetris(-1)">◀</button>
+                            <button class="btn-primary" style="width:50px; height:40px; font-size:18px;"
+                                onclick="dropTetris()">▼</button>
+                            <button class="btn-cancel" style="width:50px; height:40px; font-size:18px;"
+                                onclick="moveTetris(1)">▶</button>
+                        </div>
+                    </div>
+
+                    <!-- 共通メッセージ＆メインボタン -->
+                    <div id="ag-msg"
+                        style="font-weight:bold; color:#ecc94b; font-size:16px; min-height:1.5em; margin-bottom:20px; text-shadow: 1px 1px 2px #000;">
+                        準備はいいか？
+                    </div>
+
+                    <div style="display:flex; gap:10px;">
+                        <button id="btn-ag-action" class="btn-primary w-100"
+                            style="font-size:20px; padding:15px; box-shadow: 0 6px 0 #2b6cb0 !important;"
+                            onmousedown="executeActionGame(event)" ontouchstart="executeActionGame(event)"
+                            onmouseup="releaseActionGame(event)" ontouchend="releaseActionGame(event)">アクション！</button>
+                    </div>
+                </div>
+                <!-- やめるボタン -->
+                <button id="btn-ag-leave" class="btn-cancel"
+                    style="position:absolute; bottom:20px; width:90%; max-width:400px;" onclick="leaveActionGame()">やめる
+                    (Esc)</button>
+            </div>
+
+            <!-- ================= クラフト（料理・合成）画面 ================= -->
+            <div id="view-craft" class="view" style="background: #f7fafc;">
+                <header class="top-header" style="background: #2b6cb0; color: #fff; border-bottom: 3px solid #ecc94b;">
+                    <h2 id="craft-title">🔨 アトリエ（合成所）</h2>
+                    <button class="btn-cancel btn-sm" onclick="leaveCraft()" style="background:#4a5568;">もどる</button>
+                </header>
+                <div
+                    style="padding:10px; background:#ebf8ff; font-size:12px; color:#2b6cb0; font-weight:bold; text-align:center; border-bottom: 1px solid #cbd5e0;">
+                    素材を組み合わせて新しいアイテムを作ります
+                </div>
+                <div id="craft-list" class="scroll-area flex-list"></div>
+            </div>
+
+            <!-- ================= ミニゲーム（カジノ）画面 ================= -->
+            <div id="view-minigame" class="view" style="background: #2d3748;">
+                <header class="top-header" style="background: #1a202c; color: #fff; border-bottom: 3px solid #ecc94b;">
+                    <h2 id="mg-title" style="color: #ecc94b;">🎰 カジノ</h2>
+                    <div class="currency" style="background: #000; color: #fff; border: 1px solid #ecc94b;">所持: <span
+                            id="mg-currency-val">0</span> <span id="mg-currency-type">G</span></div>
+                </header>
+                <div class="scroll-area flex-list"
+                    style="justify-content: center; align-items: center; background: radial-gradient(circle, #4a5568, #1a202c);">
+                    <!-- ゲーム画面のメインディスプレイ -->
+                    <div id="mg-display"
+                        style="background:#000; color:#fff; padding:20px; border-radius:10px; border:4px solid #ecc94b; width:100%; max-width:400px; text-align:center; min-height:150px; font-size:40px; letter-spacing:10px; display:flex; justify-content:center; align-items:center; box-shadow: 0 0 20px rgba(236,201,75,0.5) inset;">
+                        7 7 7
+                    </div>
+
+                    <!-- 結果メッセージ -->
+                    <div id="mg-msg"
+                        style="font-weight:bold; margin:15px 0; color:#ecc94b; font-size:18px; min-height:1.5em; text-align:center; text-shadow: 1px 1px 2px #000;">
+                        いらっしゃいませ！
+                    </div>
+
+                    <!-- 操作ボタン群（ポーカーのHOLDボタンやルーレットの選択肢が入る） -->
+                    <div id="mg-controls"
+                        style="width:100%; max-width:400px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+                    </div>
+                </div>
+                <footer class="bottom-footer"
+                    style="display:flex; gap:10px; background: #1a202c; border-top: 3px solid #ecc94b;">
+                    <button id="btn-mg-play" class="btn-danger w-100" style="font-size:18px;"
+                        onclick="playMinigame()">100G
+                        賭けて遊ぶ</button>
+                    <button id="btn-mg-leave" class="btn-cancel w-100" onclick="leaveMinigame()">やめる</button>
+                </footer>
+            </div>
+
+
+            <div id="view-tactical" class="view" style="background: #1a202c;">
+                <header class="top-header"
+                    style="background:#2d3748; color:#fff; border-bottom:2px solid #ecc94b; padding:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                        <div style="font-weight:bold; color:#ecc94b;">⚔️ タクティカルモード</div>
+                        <div id="tac-turn-display" style="font-size:14px; font-family:monospace;">TURN: 1</div>
+                    </div>
+                </header>
+                <div id="tac-board-container"
+                    style="flex:1; display:flex; justify-content:center; align-items:center; overflow:auto;">
+                    <div id="tac-board"
+                        style="display:grid; grid-template-columns:repeat(9,40px); grid-template-rows:repeat(9,40px); gap:2px; background:#4a5568; padding:5px; border-radius:8px;">
+                    </div>
+                </div>
+                <div id="tac-ui-panel"
+                    style="background:rgba(0,0,0,0.8); color:#fff; padding:15px; border-top:2px solid #ecc94b;">
+                    <div id="tac-msg" style="text-align:center; color:#63b3ed; font-weight:bold; margin-bottom:10px;">
+                        味方を配置してください</div>
+
+                    <!-- ▼ 追加：情報表示パネル -->
+                    <div id="tac-unit-info"
+                        style="display:none; flex-direction:column; background:#2d3748; padding:8px; border-radius:4px; border:2px solid #a0aec0; margin-bottom:10px;">
+                        <div id="t-info-name" style="font-weight:bold; font-size:14px; color:#ecc94b;"></div>
+                        <div style="display:flex; justify-content:space-between; margin-top:4px;">
+                            <div id="t-info-hp" style="font-family:monospace; font-size:12px;"></div>
+                            <div id="t-info-stats" style="font-size:12px; color:#a0aec0;"></div>
+                        </div>
+                    </div>
+                    <!-- ▲ 追加ここまで -->
+
+                    <div id="tac-controls" style="display:flex; gap:10px;">
+                        <button id="btn-tac-end" class="btn-warning w-100" onclick="tacEndTurn()">ターン終了</button>
+                    </div>
+                </div>
+            </div>
+            <!-- ================= 4. ショップ画面 ================= -->
+            <div id="view-shop" class="view">
+                <header class="top-header" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2 id="shop-title">💰 道具屋（かう）</h2>
+                        <div class="currency">所持金: <span id="shop-money">0</span> G</div>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button id="tab-buy" class="btn-primary w-100" onclick="switchShopTab('buy')">かう</button>
+                        <button id="tab-sell" class="btn-cancel w-100" onclick="switchShopTab('sell')">うる</button>
+                    </div>
+                </header>
+                <div id="shop-list" class="scroll-area flex-list"></div>
+                <footer class="bottom-footer">
+                    <button class="btn-cancel w-100" onclick="leaveShop()">店を出る</button>
+                </footer>
+            </div>
+
+            <!-- ================= 預かり所（編成）画面 ================= -->
+            <div id="view-storage" class="view">
+                <header class="top-header">
+                    <h2>🏕️ 預かり所（パーティ編成）</h2>
+                    <button class="btn-warning btn-sm" onclick="stripAllReserveEquip()">控えの装備を全回収</button>
+                </header>
+                <div class="scroll-area flex-list">
+                    <div class="prep-block">
+                        <h3 style="border-left-color:var(--success);" id="storage-party-title">現在のパーティ (戦闘に参加するメンバー)</h3>
+                        <div id="storage-party-list" class="flex-list"></div>
+                    </div>
+                    <div class="prep-block">
+                        <h3 style="border-left-color:var(--cancel-dark);">控え・預かり所</h3>
+                        <div id="storage-reserve-list" class="flex-list"></div>
+                    </div>
+                </div>
+                <footer class="bottom-footer"><button class="btn-primary w-100" onclick="finishStorage()">編成完了</button>
+                </footer>
+            </div>
+
+            <!-- ================= 配合所（合成）画面 ================= -->
+            <div id="view-fusion" class="view">
+                <header class="top-header">
+                    <h2>🧬 配合所（モンスター合成）</h2>
+                    <!-- 🌟 追加：宝珠の所持数カウンター -->
+                    <div style="font-size:12px; font-weight:bold; color:#553c9a; background:#faf5ff; padding:4px 8px; border-radius:4px; border:1px solid #d6bcfa;">
+                        🔮 新生の宝珠: <span id="fusion-orb-count" style="font-size:16px;">0</span> 個
+                    </div>
+                </header>
+                <div class="scroll-area flex-list">
+                    <!-- 🌟 追加：配合モードの選択 -->
+                    <div class="prep-block" style="background:#edf2f7;">
+                        <h3 style="border-left-color:var(--primary);">配合モードの選択</h3>
+                        <div style="display:flex; gap:10px; font-size:14px; font-weight:bold;">
+                            <label style="cursor:pointer;"><input type="radio" name="fusion_mode" value="normal" checked onchange="updateFusionUI()"> 通常 / 進化</label>
+                            <label style="cursor:pointer; color:#805ad5;"><input type="radio" name="fusion_mode" value="shinsei" onchange="updateFusionUI()"> 新生配合 (宝珠1消費)</label>
+                        </div>
+                    </div>
+
+                    <div class="prep-block" style="background:#faf5ff;">
+                        <h3 style="border-left-color:var(--custom);">1. ベースを選ぶ（強化される側）</h3>
+                        <select id="fusion-base-sel" class="w-100" onchange="updateFusionUI()">
+                            <option value="-1">選択してください</option>
+                        </select>
+                    </div>
+                    <div class="prep-block" style="background:#fff5f5;">
+                        <h3 style="border-left-color:var(--danger);">2. 素材を選ぶ（消滅する側）</h3>
+                        <select id="fusion-mat-sel" class="w-100" onchange="updateFusionUI()">
+                            <option value="-1">選択してください</option>
+                        </select>
+                    </div>
+                    <div id="fusion-result-preview"
+                        style="text-align:center; padding:10px; font-weight:bold; color:#553c9a;">
+                        ベースと素材を選んでください
+                    </div>
+                </div>
+                <footer class="bottom-footer" style="display:flex; gap:10px;">
+                    <button class="btn-cancel w-100" onclick="finishFusion()">やめる</button>
+                    <button class="btn-custom w-100" id="btn-execute-fusion" onclick="executeFusion()"
+                        disabled>配合する！</button>
+                </footer>
+            </div>
+
+            <!-- ================= 5. 戦闘準備画面 ================= -->
+            <div id="view-prep" class="view">
+                <header class="top-header">
+                    <h2>⚔️ 戦闘準備</h2>
+                </header>
+                <div class="scroll-area flex-list">
+                    <div class="prep-block">
+                        <h3>出現する敵</h3>
+                        <div id="prep-enemy-list" class="enemy-chips"></div>
+                    </div>
+                    <div class="prep-block flex-grow">
+                        <h3>味方編成・装備変更</h3>
+                        <div id="prep-player-list" class="flex-list"></div>
+                    </div>
+                </div>
+                <footer class="bottom-footer">
+                    <button class="btn-danger w-100" onclick="finishPrep()">バトル開始！！</button>
+                </footer>
+            </div>
+
+            <!-- ================= 5.5 リザルト（戦闘結果）画面 ================= -->
+            <div id="view-result" class="view">
+                <header class="top-header">
+                    <h2>🏆 バトル結果</h2>
+                </header>
+                <div class="scroll-area flex-list">
+                    <div class="prep-block" style="text-align:center; padding: 20px;">
+                        <h3
+                            style="color:var(--warning); font-size:28px; border:none; margin-bottom:15px; text-shadow:1px 1px 2px rgba(0,0,0,0.3);">
+                            VICTORY!!</h3>
+                        <p style="font-size:18px; font-weight:bold;">獲得G: <span id="res-money"
+                                style="color:var(--warning-dark);">0</span> G</p>
+                        <p style="font-size:18px; font-weight:bold;">獲得EXP: <span id="res-exp"
+                                style="color:var(--success-dark);">0</span></p>
+                    </div>
+
+                    <!-- スカウト成功時のみ表示されるエリア -->
+                    <div id="res-scout-area" style="display:none;">
+                        <div class="prep-block" style="background:#f0fff4; border-color:#38a169;">
+                            <h3 style="border-left-color:var(--success);">✨ 新しい仲間が加わった！</h3>
+                            <p style="font-size:12px; color:#4a5568; margin-bottom:10px;">名前を変更できます（そのままでもOKです）</p>
+                            <div id="res-scout-list" class="flex-list"></div>
+                        </div>
+                    </div>
+                </div>
+                <footer class="bottom-footer">
+                    <button class="btn-primary w-100" onclick="finishResult()">冒険を続ける</button>
+                </footer>
+            </div>
+
+
+
+            <!-- ================= 6. バトル画面 ================= -->
+            <div id="view-battle" class="view battle-bg">
+
+                <!-- ダイスボード（中央ポップアップ） -->
+                <div id="dice-board" style="display:none;">
+                    <div id="dice-battle-ui">
+                        <div class="dice-header">⚔️ 戦闘判定</div>
+                        <div class="dice-duel">
+                            <div class="dice-side">
+                                <div id="bd-p-name">味方</div>
+                                <div class="d-val" id="bd-p-val">0</div>
+                                <div class="d-max">Max: <span id="bd-p-max">0</span></div>
+                            </div>
+                            <div class="d-vs">VS</div>
+                            <div class="dice-side">
+                                <div id="bd-e-name">敵</div>
+                                <div class="d-val" id="bd-e-val">0</div>
+                                <div class="d-max">Max: <span id="bd-e-max">0</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="dice-hit-ui" style="display: none;">
+                        <div class="dice-header">🎯 命中判定 (1d10)</div>
+                        <div id="hd-rate" class="hit-rate" style="margin-bottom: 5px;">命中率: --%</div>
+                        <div id="hd-table"
+                            style="text-align: left; background: #fff; border-radius: 4px; font-size: 14px; font-family: monospace; line-height: 1.4; padding: 10px; margin-bottom: 10px; border: 2px solid #cbd5e0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                        </div>
+                        <div class="d-val mx-auto" id="hd-val">0</div>
+                    </div>
+                    <!-- 🌟 追加：キャラメイク（ステータス）用UIをボード内に統合 -->
+                    <div id="dice-stat-ui" style="display: none;">
+                    <div class="dice-header" id="stat-dice-header">能力値の決定</div>
+                    <!-- 巨大な数字を表示するエリア -->
+                    <div class="d-val mx-auto" id="stat-dice-val" style="width: 120px; height: 80px; line-height: 74px; font-size: 48px;">?</div>
+                    <div id="stat-dice-formula" style="font-size: 12px; color: #a0aec0; margin-top: 5px; margin-bottom: 15px;"></div>
+                    <!-- 🌟 追加：決定・振り直しボタンをボード内部に配置 -->
+                    <div id="stat-dice-actions" style="display:none; flex-direction:column; gap:10px;">
+                        <button id="btn-stat-accept" class="btn-primary w-100" style="padding:15px; font-size:18px; box-shadow: 0 4px 0 #2b6cb0 !important;" onclick="acceptStatRoll()">決定</button>
+                        <button id="btn-stat-reroll" class="btn-cancel w-100" onclick="retryStatRoll()">振り直す</button>
+                    </div>
+                </div>
+                </div>
+
+                <!-- AAとステータス領域 (1vs1時用) -->
+                <div class="battle-field scroll-area">
+                    <!-- 味方 -->
+                    <div class="battler player-side">
+                        <div class="battler-aa">
+                            <pre id="p-aa"></pre>
+                        </div>
+                        <div class="battler-status">
+                            <div class="st-name"><span id="p-name">やる夫</span> <span class="lv" id="p-lv">Lv.1</span>
+                            </div>
+                            <div class="st-bar-row">
+                                <span class="lbl hp">HP</span>
+                                <div class="bar-bg">
+                                    <div class="bar-fill hp" id="p-hp-bar"></div>
+                                </div>
+                                <span class="val" id="p-hp-text">0/0</span>
+                            </div>
+                            <div class="st-res-row" id="p-res-container">
+                                <span class="lbl shock">衝</span>
+                                <div class="bar-bg">
+                                    <div class="bar-fill shock" id="p-shk-bar"></div>
+                                    <span class="val" id="p-shk-txt"></span> <!-- 🌟 外にあったこれを箱の中に入れる -->
+                                </div>
+                                <span class="lbl heat">熱</span>
+                                <div class="bar-bg">
+                                    <div class="bar-fill heat" id="p-het-bar"></div>
+                                    <span class="val" id="p-het-txt"></span> <!-- 🌟 これも中へ -->
+                                </div>
+                                <span class="lbl elec">電</span>
+                                <div class="bar-bg">
+                                    <div class="bar-fill elec" id="p-elc-bar"></div>
+                                    <span class="val" id="p-elc-txt"></span> <!-- 🌟 これも中へ -->
+                                </div>
+                            </div>
+                            <div class="st-buffs" id="p-stats"></div>
+                        </div>
+                    </div>
+                    <!-- 敵 -->
+                    <div class="battler enemy-side">
+                        <div class="battler-aa">
+                            <pre id="e-aa"></pre>
+                        </div>
+                        <div class="battler-status">
+                            <div class="st-name"><span id="e-name">敵</span></div>
+                            <div class="st-bar-row">
+                                <span class="lbl hp">HP</span>
+                                <div class="bar-bg">
+                                    <div class="bar-fill hp" id="e-hp-bar"></div>
+                                </div>
+                                <span class="val" id="e-hp-text">0/0</span>
+                            </div>
+                            <div class="st-res-row" id="e-res-container">
+                                <span class="lbl shock">衝</span>
+                                <div class="bar-bg">
+                                    <div class="bar-fill shock" id="e-shk-bar"></div>
+                                    <span class="val" id="e-shk-txt"></span> <!-- 🌟 中に入れる -->
+                                </div>
+                                <span class="lbl heat">熱</span>
+                                <div class="bar-bg">
+                                    <div class="bar-fill heat" id="e-het-bar"></div>
+                                    <span class="val" id="e-het-txt"></span> <!-- 🌟 中に入れる -->
+                                </div>
+                                <span class="lbl elec">電</span>
+                                <div class="bar-bg">
+                                    <div class="bar-fill elec" id="e-elc-bar"></div>
+                                    <span class="val" id="e-elc-txt"></span> <!-- 🌟 中に入れる -->
+                                </div>
+                            </div>
+                            <div class="st-buffs" id="e-stats"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- コマンドUI領域 -->
+                <div id="battle-info-display"
+                    style="display:none; position:absolute; top:60px; right:10px; text-align:right; z-index:100; pointer-events:none;">
+                    <!-- 🌟 top:60px; に変更 -->
+                    <div
+                        style="background:rgba(45,55,72,0.9); color:white; padding:4px 12px; border-radius:20px; font-weight:bold; font-size:14px; border:2px solid white; box-shadow:0 2px 10px rgba(0,0,0,0.3); margin-bottom:5px;">
+                        Turn: <span id="turn-val">1</span></div>
+                    <div id="timer-display"
+                        style="display:none; background:rgba(229,62,62,0.9); color:white; padding:4px 12px; border-radius:20px; font-weight:bold; font-family:monospace; font-size:18px; border:2px solid white; box-shadow:0 2px 10px rgba(0,0,0,0.3); transition:0.2s;">
+                        ⏱ <span id="timer-val">30</span>s</div>
+                </div>
+
+                <!-- ▼▼▼ トドメ演出カットイン ▼▼▼ -->
+                <div id="battle-cutin"
+                    style="display:none; position:absolute; top:25%; left:-100%; width:100%; background:linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 20%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%); border-top:3px solid #ecc94b; border-bottom:3px solid #ecc94b; z-index:9999; padding:10px 0; align-items:center; justify-content:center; gap:20px; transition:left 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+                    <pre id="cutin-aa" class="aa-preview"
+                        style="font-size:12px; background:transparent; border:none; color:#fff; text-shadow:0 0 10px #ecc94b; margin:0; padding:0; min-height:0;"></pre>
+                    <div style="display:flex; flex-direction:column; align-items:flex-start;">
+                        <div id="cutin-name" style="font-size:16px; color:#a0aec0; font-weight:bold;"></div>
+                        <div id="cutin-msg"
+                            style="font-size:32px; color:#ecc94b; font-weight:900; font-style:italic; text-shadow:2px 2px 0px #000;">
+                            TARGET DESTROYED</div>
+                    </div>
+                </div>
+                <!-- ▲▲▲ ここまで ▲▲▲ -->
+                <div class="battle-ui">
+                    <div id="msg-window"></div>
+                    <div id="cmd-main" class="cmd-grid">
+                        <button onclick="executeAction('attack', 'normal')" id="btn-attack">通常攻撃</button>
+                        <button onclick="openSub('skill')">技</button>
+                        <button onclick="openSub('item')">どうぐ</button>
+                        <button onclick="openSub('change')">いれかえ</button>
+                        <button onclick="executeAction('scout', 'none')" id="btn-scout"
+                            style="background:var(--info-dark);">スカウト</button>
+                        <button onclick="executeAction('escape', 'none')" id="btn-escape"
+                            style="background:var(--cancel-dark);">にげる</button>
+                    </div>
+                    <div id="cmd-sub" class="cmd-sub-area" style="display: none;">
+                        <div id="sub-list" class="scroll-area flex-list" style="padding:0;"></div>
+                        <button class="btn-cancel w-100 mt-2" onclick="closeSub()">もどる (Esc)</button>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- /app-container 終了 -->
+
+        <div id="sys-log" style="display:none;"></div>
+
+        <!-- ================= QRスキャン用モーダル ================= -->
+        <div id="qr-scan-modal" class="modal" style="display:none;">
+            <div class="modal-content" style="max-width: 400px; padding: 15px;">
+                <h3 style="margin-bottom: 10px;">📷 QRコードスキャン</h3>
+                <div id="qr-video-container"
+                    style="position:relative; width:100%; aspect-ratio: 1/1; background:#000; overflow:hidden; border-radius:8px;">
+                    <video id="qr-video" style="width:100%; height:100%; object-fit:cover;" playsinline></video>
+                    <!-- スキャン枠の演出 -->
+                    <div
+                        style="position:absolute; inset:20%; border:2px solid #ecc94b; box-shadow:0 0 0 1000px rgba(0,0,0,0.5); pointer-events:none;">
+                    </div>
+                </div>
+                <div style="text-align:center; margin-top:10px; font-size:12px; color:#718096;">枠の中にQRコードを映してください</div>
+                <button class="btn-cancel w-100 mt-2" onclick="stopQRScan()">キャンセル</button>
+            </div>
+            <canvas id="qr-canvas" style="display:none;"></canvas>
+        </div>
+        <!-- 🍞 トースト通知コンテナ -->
+        <div id="toast-container"></div>
+        <!-- 📜 バックログ モーダル -->
+        <div id="log-modal">
+            <h3
+                style="color:#fff; text-align:center; margin-bottom:15px; border-bottom:1px solid #4a5568; padding-bottom:10px;">
+                📜 メッセージ履歴</h3>
+            <div id="log-content"></div>
+            <button id="btn-close-log" class="btn-cancel" onclick="closeLogModal()">閉じる (Esc)</button>
+        </div>
+        <script src="aa_library/aa_index.js" defer></script>
+        <script src="char_data.js" defer></script>
+        <script src="item_data.js" defer></script>
+        <script src="scenario_data.js" defer></script>
+        <script src="skills_data.js" defer></script>
+        <script src="traits_data.js" defer></script>
+        <script src="script.js" defer></script>
+        <script src="editor.js" defer></script>
+
 </body>
+
 </html>
