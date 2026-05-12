@@ -27,7 +27,26 @@ heal_2: { id: "heal_2", type: "consumable", effect: "heal", effectPower: 50, nam
     buff_atk_1: { id: "buff_atk_1", type: "consumable", effect: "buff", effectPower: 20, name: "力の種", price: 150, desc: "この戦闘中、全能力+20。" },
     buff_atk_2: { id: "buff_atk_2", type: "consumable", effect: "buff", effectPower: 50, name: "闘神の丸薬", price: 300, desc: "この戦闘中、全能力+50。" },
     
-    bomb_1: { id: "bomb_1", type: "consumable", effect: "damage_fixed", effectPower: 30, name: "手投げ弾", price: 40, desc: "敵に固定30ダメージ。" },
+    mat_powder: { 
+        id: "mat_powder", 
+        type: "consumable", 
+        name: "黒色火薬", 
+        price: 20, 
+        desc: "強力な爆発物を作るための材料。ゴブリンなどが持っているらしい。",
+        aa: "item.original.basic.薬" // 薬のアイコンを流用（または火薬っぽいものに）
+    },
+
+    // --- 修正（手投げ弾のレシピを変更） ---
+    bomb_1: { 
+        id: "bomb_1", 
+        type: "consumable", 
+        name: "手投げ弾", 
+        price: 40, 
+        // 🌟 修正：火薬2個で作れるように変更！
+        recipe: "mat_powder:2", 
+        craft_category: "爆発物",
+        desc: "岩を壊したり、敵に30ダメージ与える。" 
+    },
     bomb_2: { id: "bomb_2", type: "consumable", effect: "damage_fixed", effectPower: 100, name: "メガバズーカ", price: 200, desc: "敵に固定100ダメージ。" },
 
     insulate_1: { id: "insulate_1", type: "consumable", effect: "res_up", name: "絶縁シート", price: 40, desc: "電磁耐性の減少を抑える。" },
