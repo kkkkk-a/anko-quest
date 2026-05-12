@@ -371,6 +371,7 @@ if (type === "system_set") content = `
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; white-space: nowrap;"><input type="checkbox" class="step-data" data-key="enableMultiEquip" style="width:16px; height:16px; flex-shrink:0; margin:0;"> 同一アイテムの重複装備</label>
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; white-space: nowrap;"><input type="checkbox" class="step-data" data-key="enableTension" style="width:16px; height:16px; flex-shrink:0; margin:0;"> テンションシステム</label>
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer; white-space: nowrap;"><input type="checkbox" class="step-data" data-key="enableMpSt" checked style="width:16px; height:16px; flex-shrink:0; margin:0;"> <span style="color:#9f7aea; font-weight:bold;">MP・STリソース</span></label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; white-space: nowrap;"><input type="checkbox" class="step-data" data-key="enableEvolution" checked style="width:16px; height:16px; flex-shrink:0; margin:0;"> <span style="color:#38a169; font-weight:bold;">進化配合を許可</span></label>
     </div>
     
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; margin-top:10px;">
@@ -706,7 +707,41 @@ else if (type === "stat_change") content = `
             <div class="editor-group" style="flex:1;"><label>条件を満たす時のジャンプ先:</label>${getSceneSelectUI("step-data", "true_next", "yes_route")}</div>
             <div class="editor-group" style="flex:1;"><label>満たさない時のジャンプ先:</label>${getSceneSelectUI("step-data", "false_next", "no_route")}</div>
         </div>`;
-    else if (type === "end") content = `<div class="editor-group"><label style="color:#e53e3e;">※このノードでゲームを終了し、タイトルへ戻ります。</label></div>`;
+    else if (type === "end") content = `
+        <div style="background:#f7fafc; padding:10px; border-radius:6px; border:1px solid #cbd5e0;">
+            <label style="color:#2b6cb0; font-weight:bold; display:block; margin-bottom:5px;">🏁 エンディング・クリア後の挙動</label>
+            
+            <select class="step-data w-100 mb-2" data-key="clearMode" onchange="const root = this.parentElement; const loopOpts = root.querySelector('.loop-opts'); const hint = root.querySelector('.mode-hint'); if(this.value==='loop'){ loopOpts.style.display='block'; hint.innerText='【二周目】能力を引き継いで最初からやり直します。フラグと日数はリセットされます。'; hint.style.color='#dd6b20'; } else if(this.value==='keep'){ loopOpts.style.display='none'; hint.innerText='【後日談】フラグも日数もそのまま維持し、平和になった世界を冒険し続けます。'; hint.style.color='#38a169'; } else { loopOpts.style.display='none'; hint.innerText='【終了】セーブデータを完全に削除し、タイトル画面へ戻ります。'; hint.style.color='#718096'; }">
+                <option value="delete">❌ データを消去してタイトルへ</option>
+                <option value="loop" style="color:#dd6b20; font-weight:bold;">🔄 強くてニューゲーム (歴史をリセット)</option>
+                <option value="keep" style="color:#38a169; font-weight:bold;">🚀 クリア後も続行 (現状を維持)</option>
+            </select>
+
+            <!-- 🌟 モード別の説明をリアルタイムで表示する欄 -->
+            <div class="mode-hint" style="font-size:11px; font-weight:bold; margin-bottom:10px; min-height:1.5em; color:#718096;">
+                挙動を選択してください。
+            </div>
+            
+            <!-- Loop時のみ表示される引き継ぎ設定 -->
+            <div class="loop-opts" style="display:none; background:#fffaf0; padding:10px; border:1px solid #d69e2e; border-radius:4px; margin-top:5px; margin-bottom:10px;">
+                <label style="color:#dd6b20; font-weight:bold; display:block; margin-bottom:8px; border-bottom:1px solid #fbd38d;">🔄 引き継ぐ要素の選択</label>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    <label style="cursor:pointer; font-size:12px;"><input type="checkbox" class="step-data" data-key="keepMoney" checked> 所持金・宝珠を持ち越す</label>
+                    <label style="cursor:pointer; font-size:12px;"><input type="checkbox" class="step-data" data-key="keepItems" checked> アイテム・装備・秘伝書を持ち越す</label>
+                    <label style="cursor:pointer; font-size:12px;"><input type="checkbox" class="step-data" data-key="keepChars" checked> 仲間・Lv・ステータスを持ち越す</label>
+                </div>
+                <div style="font-size:10px; color:#c05621; margin-top:8px; padding:5px; background:#fff; border-radius:4px;">
+                    ※<b>フラグ(state.flags)</b>は、チェックに関わらず<br>
+                    　二周目（Loop）では必ずリセットされます。
+                </div>
+            </div>
+
+            <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #cbd5e0;">
+                <label style="font-weight:bold; font-size:12px;">ジャンプ先 (周回の開始地点 / 続行の復帰地点):</label>
+                ${getSceneSelectUI("step-data", "loopNext", "start")}
+                <div style="font-size:11px; color:#e53e3e; margin-top:8px; font-weight:bold;">※ このノードを通過すると累計クリア回数が +1 されます。</div>
+            </div>
+        </div>`;
     return `<div class="step-block step-${type}" id="step-${index}"><div class="step-block-header"><span style="cursor: grab; user-select: none;">≡ [シナリオ] ${type.toUpperCase()}</span><div style="display:flex; gap:2px;"><button class="btn-custom btn-sm" style="padding:2px 8px;" onclick="moveElement(this, -1)">▲</button><button class="btn-custom btn-sm" style="padding:2px 8px;" onclick="moveElement(this, 1)">▼</button><button class="btn-toggle-step" onclick="toggleStep('step-${index}')"></button><button class="btn-info btn-sm" onclick="editorDuplicateStep('step-${index}')">複製</button><button class="btn-remove-step btn-danger btn-sm" onclick="editorRemoveElement('step-${index}')">削除</button></div></div><input type="hidden" class="step-type" value="${type}"><div class="step-body">${content}</div></div>`;
 }
 
@@ -920,7 +955,7 @@ window.editorAddEnemy = function () {
     const index = enemyIndexCount++;
     const content = `
         <div class="step-block" id="enemy-${index}">
-<div class="step-block-header"><span style="color:#e67e22; cursor: grab;">≡ [敵データ]</span><div style="display:flex; gap:2px;"><button class="btn-custom btn-sm" style="padding:2px 8px;" onclick="moveElement(this, -1)">▲</button><button class="btn-custom btn-sm" style="padding:2px 8px;" onclick="moveElement(this, 1)">▼</button><button class="btn-toggle-step" onclick="toggleStep('enemy-${index}')"></button><button class="btn-remove-step btn-danger btn-sm" onclick="editorRemoveElement('enemy-${index}')">削除</button></div></div>
+            <div class="step-block-header"><span style="color:#e67e22; cursor: grab;">≡ [敵データ]</span><div style="display:flex; gap:2px;"><button class="btn-custom btn-sm" style="padding:2px 8px;" onclick="moveElement(this, -1)">▲</button><button class="btn-custom btn-sm" style="padding:2px 8px;" onclick="moveElement(this, 1)">▼</button><button class="btn-toggle-step" onclick="toggleStep('enemy-${index}')"></button><button class="btn-remove-step btn-danger btn-sm" onclick="editorRemoveElement('enemy-${index}')">削除</button></div></div>
             <div class="step-body">
             <div class="editor-group"><label>ID / 表示名:</label><input type="text" class="enemy-data" data-key="id" placeholder="custom_enemy" oninput="updateDatalists()"><input type="text" class="enemy-data" data-key="name" placeholder="真・魔王"></div>
             <div style="display:flex; gap:5px;">
@@ -934,11 +969,29 @@ window.editorAddEnemy = function () {
                 <div class="editor-group"><label>装備品:</label><select class="enemy-data equip-helper-select" data-key="equip"><option value="">なし</option></select></div>
             </div>
 
-
+            ${getTraitSelectUI('enemy')}
+            <div style="display:flex; gap:5px;"><div class="editor-group"><label>ボス耐性 (割合Dや強制異常・即死・強奪を無効化):</label><select class="enemy-data" data-key="isBoss"><option value="false">通常敵</option><option value="true" style="color:red; font-weight:bold;">あり (ボス)</option></select></div></div>
             
-${getTraitSelectUI('enemy')}
-<div style="display:flex; gap:5px;"><div class="editor-group"><label>ボス耐性 (割合Dや強制異常・即死・強奪を無効化):</label><select class="enemy-data" data-key="isBoss"><option value="false">通常敵</option><option value="true" style="color:red; font-weight:bold;">あり (ボス)</option></select></div></div>
-            <div style="display:flex; gap:5px;"><div class="editor-group"><label>ドロップG / EXP:</label><input type="number" class="enemy-data" data-key="dropMoney" value="100"><input type="number" class="enemy-data" data-key="dropExp" value="50"></div></div>
+            <!-- 💰 報酬設定エリア -->
+            <div style="background:#f0fff4; padding:8px; border-radius:4px; border:1px solid #9ae6b4; margin-bottom:5px;">
+                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                    <div class="editor-group" style="flex:1;"><label>ドロップG:</label><input type="number" class="enemy-data" data-key="dropMoney" value="100"></div>
+                    <div class="editor-group" style="flex:1;"><label>ドロップEXP:</label><input type="number" class="enemy-data" data-key="dropExp" value="50"></div>
+                </div>
+
+                <!-- 🌟 追加：アイテムドロップ設定 -->
+                <div style="display:flex; gap:5px;">
+                    <div class="editor-group" style="flex:2;">
+                        <label style="color:#276749; font-weight:bold;">🎁 ドロップアイテム (ID):</label>
+                        <input type="text" class="enemy-data" data-key="dropItem" placeholder="heal_1" list="item-list">
+                    </div>
+                    <div class="editor-group" style="flex:1;">
+                        <label style="color:#276749; font-weight:bold;">確率 (%):</label>
+                        <input type="number" class="enemy-data" data-key="dropRate" value="0" min="0" max="100" title="0で落とさない、100で確実">
+                    </div>
+                </div>
+            </div>
+
             <div style="display:flex; gap:5px; margin-top:5px;">
                 <div class="editor-group" style="flex:1;"><label>MAX 衝撃 / 限界:</label><div style="display:flex; gap:2px;"><input type="number" class="enemy-data" data-key="maxShock" value="50"><input type="number" class="enemy-data" data-key="limit_maxShock" value="300" style="background:#fed7d7;"></div></div>
                 <div class="editor-group" style="flex:1;"><label>MAX 熱量 / 限界:</label><div style="display:flex; gap:2px;"><input type="number" class="enemy-data" data-key="maxHeat" value="50"><input type="number" class="enemy-data" data-key="limit_maxHeat" value="300" style="background:#fed7d7;"></div></div>
@@ -968,93 +1021,73 @@ ${getTraitSelectUI('enemy')}
                 </div>
             </div>
             ${getAffinityUI('enemy')}
+            ${getMultiFaceAA_UI('enemy')}
 
-${getMultiFaceAA_UI('enemy')}
-
-<div class="editor-group" style="background:#eebefa; padding:8px; border-radius:4px; margin-top:5px; border:1px solid #d6bcfa;">
-    <label style="color:#553c9a; font-weight:bold;">🎭 ギミックイベント（戦闘中に特定の行動をされた時に中断してジャンプ）:</label>
-    <div style="display:flex; gap:5px;">
-                <input type="text" class="enemy-data" data-key="trigger_id" placeholder="反応する技・装備・アイテムのID" style="flex:1;">
-                ${getSceneSelectUI("enemy-data", "trigger_scene", "遷移先のシーンID")}
+            <div class="editor-group" style="background:#eebefa; padding:8px; border-radius:4px; margin-top:5px; border:1px solid #d6bcfa;">
+                <label style="color:#553c9a; font-weight:bold;">🎭 ギミックイベント（戦闘中に特定の行動をされた時に中断してジャンプ）:</label>
+                <div style="display:flex; gap:5px;">
+                    <input type="text" class="enemy-data" data-key="trigger_id" placeholder="反応する技・装備・アイテムのID" style="flex:1;">
+                    ${getSceneSelectUI("enemy-data", "trigger_scene", "遷移先のシーンID")}
+                </div>
+                <div style="font-size:10px; color:#718096; margin-top:4px; line-height:1.4;">
+                    ※ 敵に特定の技・武器で攻撃した時だけでなく、<b>戦闘中に特定のアイテムを使った瞬間</b>にも発動します。
+                </div>
             </div>
-    <div style="font-size:10px; color:#718096; margin-top:4px; line-height:1.4;">
-        ※ 敵に特定の技・武器で攻撃した時だけでなく、<b>戦闘中に特定のアイテムを使った瞬間</b>にも発動します。<br>
-        ※ （例：「ポケモンのふえ」のアイテムIDを入れると、それを使った瞬間にボスが目覚めるイベントへ飛ぶ等）
-    </div>
-</div>
-<div class="editor-group" style="background:#fff5f5; padding:8px; border-radius:4px; margin-top:5px; border:1px solid #fc8181;">
-    <label style="color:#c53030; font-weight:bold;">💀 死亡時イベント（HP0になった瞬間に戦闘を中断してジャンプ）:</label>
-            ${getSceneSelectUI("enemy-data", "death_scene", "遷移先のシーンID (空欄なら普通に死ぬ)")}
-    <div style="font-size:10px; color:#718096; margin-top:2px;">※ ボスの「第2形態」への移行や、死に際の会話イベントに使えます。</div>
-</div>
-
+            <div class="editor-group" style="background:#fff5f5; padding:8px; border-radius:4px; margin-top:5px; border:1px solid #fc8181;">
+                <label style="color:#c53030; font-weight:bold;">💀 死亡時イベント（HP0になった瞬間に戦闘を中断してジャンプ）:</label>
+                ${getSceneSelectUI("enemy-data", "death_scene", "遷移先のシーンID (空欄なら普通に死ぬ)")}
+            </div>
 
             <div class="editor-group">
-    <label>習得済みの技 (選んで追加):</label>
-        <div class="editor-group" style="background:#edf2f7; padding:8px; border-radius:4px; margin-top:5px; border:1px solid #cbd5e0;">
-            
-            <!-- 🌟 新設：盤面移動AI（タクティカル） -->
-            <label style="color:#2b6cb0; font-weight:bold; border-bottom:1px solid #cbd5e0; padding-bottom:4px; margin-bottom:8px; display:block;">🗺️ 盤面での動き方（移動AI）</label>
-            <div style="display:flex; gap:10px; margin-bottom:15px;">
-                <div style="flex:1;">
-                    <span style="font-size:11px; color:#4a5568;">基本の移動方針:</span>
-                    <select class="enemy-data w-100" data-key="ai_move_type" style="padding:4px;">
-                        <option value="closest">猛攻（一番近い相手を狙う）</option>
-                        <option value="weakest">暗殺（HPが一番低い相手を狙う）</option>
-                        <option value="healer">支援（傷ついた味方/敵軍 に近づく）</option>
-                        <option value="stay">不動（自分の初期位置から動かない）</option>
-                        <option value="coward">臆病（相手から逃げるように動く）</option>
-                    </select>
-                </div>
-                <div style="flex:1;">
-                    <span style="font-size:11px; color:#4a5568;">ピンチ時の行動変化:</span>
-                    <select class="enemy-data w-100" data-key="ai_move_pinch" style="padding:4px;">
-                        <option value="none">変化なし（最後まで戦う）</option>
-                        <option value="escape_25" style="color:#e53e3e;">HP25%以下で「臆病(逃走)」に変化</option>
-                        <option value="escape_50" style="color:#e53e3e;">HP50%以下で「臆病(逃走)」に変化</option>
-                    </select>
-                </div>
-            </div>
+                <div class="editor-group" style="background:#edf2f7; padding:8px; border-radius:4px; margin-top:5px; border:1px solid #cbd5e0;">
+                    <label style="color:#2b6cb0; font-weight:bold; border-bottom:1px solid #cbd5e0; padding-bottom:4px; margin-bottom:8px; display:block;">🗺️ 盤面での動き方（移動AI）</label>
+                    <div style="display:flex; gap:10px; margin-bottom:15px;">
+                        <div style="flex:1;">
+                            <span style="font-size:11px; color:#4a5568;">基本の移動方針:</span>
+                            <select class="enemy-data w-100" data-key="ai_move_type" style="padding:4px;">
+                                <option value="closest">猛攻（一番近い相手を狙う）</option>
+                                <option value="weakest">暗殺（HPが一番低い相手を狙う）</option>
+                                <option value="healer">支援（傷ついた味方/敵軍 に近づく）</option>
+                                <option value="stay">不動（自分の初期位置から動かない）</option>
+                                <option value="coward">臆病（相手から逃げるように動く）</option>
+                            </select>
+                        </div>
+                        <div style="flex:1;">
+                            <span style="font-size:11px; color:#4a5568;">ピンチ時の行動変化:</span>
+                            <select class="enemy-data w-100" data-key="ai_move_pinch" style="padding:4px;">
+                                <option value="none">変化なし（最後まで戦う）</option>
+                                <option value="escape_25" style="color:#e53e3e;">HP25%以下で「臆病(逃走)」に変化</option>
+                                <option value="escape_50" style="color:#e53e3e;">HP50%以下で「臆病(逃走)」に変化</option>
+                            </select>
+                        </div>
+                    </div>
 
-            <!-- 🌟 刷新：無制限に追加できるカード式バトルAI -->
-            <label style="color:#e53e3e; font-weight:bold; border-bottom:1px solid #cbd5e0; padding-bottom:4px; margin-bottom:8px; display:block;">⚔️ 戦闘中の技の選び方（上から順に判定）</label>
-            
-            <!-- AIカードを追加するコンテナ -->
-            <div class="ai-cards-container" style="display:flex; flex-direction:column; gap:5px; margin-bottom:8px;">
-                <!-- ※新規作成時は空でOK。後でJSが1枚目を足す -->
-            </div>
+                    <label style="color:#e53e3e; font-weight:bold; border-bottom:1px solid #cbd5e0; padding-bottom:4px; margin-bottom:8px; display:block;">⚔️ 戦闘中の技の選び方（上から順に判定）</label>
+                    <div class="ai-cards-container" style="display:flex; flex-direction:column; gap:5px; margin-bottom:8px;"></div>
+                    <button type="button" class="btn-success btn-sm w-100 mb-2" onclick="addAiCard(this)">＋ 新しい行動条件を追加</button>
 
-            <button type="button" class="btn-success btn-sm w-100 mb-2" onclick="addAiCard(this)">＋ 新しい行動条件を追加</button>
-
-            <!-- 基本行動（どれにも当てはまらなかった時） -->
-            <div style="display:flex; align-items:center; gap:5px; background:#fff; padding:6px; border-radius:4px; border:1px solid #e2e8f0; border-left:4px solid #3182ce;">
-                <span style="font-size:11px; font-weight:bold; color:#3182ce; width:40px; text-align:center;">基本</span>
-                <span style="font-size:11px;">上の条件に合わない時は</span>
-                
-                <input type="text" class="enemy-data skill-input" data-key="act_base_skill" value="normal" list="skill-list" placeholder="技IDを入力" style="flex:2; padding:4px; font-size:12px; border:1px solid #cbd5e0; border-radius:4px;">
-                
-                <span style="font-size:11px;">を</span>
-                <input type="number" class="enemy-data" data-key="act_base_prob" value="50" style="width:50px; padding:4px; text-align:right; font-size:12px; border:1px solid #cbd5e0; border-radius:4px;">
-                <span style="font-size:11px;">%で使い、外れたら</span>
-                
-                <input type="text" class="enemy-data skill-input" data-key="act_base_skill2" value="none" list="skill-list" placeholder="noneで何もしない" style="flex:2; padding:4px; font-size:12px; border:1px solid #cbd5e0; border-radius:4px;">
-            </div>
-            
-            <!-- JSON保存用の隠しフィールド（ここにカードのデータを配列化してぶち込む） -->
-            <input type="hidden" class="enemy-data" data-key="ai_cards" value="[]">
-            <div style="margin-top:10px; padding-top:8px; border-top:1px dashed #cbd5e0;">
-                <label style="font-size:11px; color:#4a5568;">💡 このキャラをスカウト（配合）した時に引き継がれる技：</label>
-                <!-- 🌟 修正：整理ボタンを横に追加 -->
-                <div style="display:flex; gap:5px;">
-                    <input type="text" class="enemy-data skill-input w-100" data-key="skills" placeholder="手動追加も可能(fire_1, heal_1等)" list="skill-list" oninput="appendSkillFromList(this)" style="background:#edf2f7; color:#2b6cb0; font-weight:bold; border:1px solid #cbd5e0; padding:6px; border-radius:4px;">
-                    <button type="button" class="btn-info btn-sm" style="white-space:nowrap;" onclick="cleanupEnemySkills(this)">🧹 使ってない技を消去</button>
+                    <div style="display:flex; align-items:center; gap:5px; background:#fff; padding:6px; border-radius:4px; border:1px solid #e2e8f0; border-left:4px solid #3182ce;">
+                        <span style="font-size:11px; font-weight:bold; color:#3182ce; width:40px; text-align:center;">基本</span>
+                        <input type="text" class="enemy-data skill-input" data-key="act_base_skill" value="normal" list="skill-list" placeholder="技IDを入力" style="flex:2; padding:4px; font-size:12px; border:1px solid #cbd5e0; border-radius:4px;">
+                        <span style="font-size:11px;">を</span>
+                        <input type="number" class="enemy-data" data-key="act_base_prob" value="50" style="width:50px; padding:4px; text-align:right; font-size:12px; border:1px solid #cbd5e0; border-radius:4px;">
+                        <span style="font-size:11px;">%で使い、外れたら</span>
+                        <input type="text" class="enemy-data skill-input" data-key="act_base_skill2" value="none" list="skill-list" placeholder="noneで何もしない" style="flex:2; padding:4px; font-size:12px; border:1px solid #cbd5e0; border-radius:4px;">
+                    </div>
+                    
+                    <input type="hidden" class="enemy-data" data-key="ai_cards" value="[]">
+                    <div style="margin-top:10px; padding-top:8px; border-top:1px dashed #cbd5e0;">
+                        <label style="font-size:11px; color:#4a5568;">💡 スカウト（配合）時に引き継がれる技：</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="text" class="enemy-data skill-input w-100" data-key="skills" placeholder="fire_1, heal_1等" list="skill-list" oninput="appendSkillFromList(this)" style="background:#edf2f7; color:#2b6cb0; font-weight:bold; border:1px solid #cbd5e0; padding:6px; border-radius:4px;">
+                            <button type="button" class="btn-info btn-sm" style="white-space:nowrap;" onclick="cleanupEnemySkills(this)">🧹 使ってない技を消去</button>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            </div>
             </div>
             </div>
         </div>`;
-    const div = document.createElement("div"); div.innerHTML = content; document.getElementById("edit-enemies").appendChild(div.firstElementChild); updateDatalists();
+    const div = document.createElement("div"); div.innerHTML = content; document.getElementById("edit-enemies").appendChild(div.firstElementChild);
     if (!isBatchLoading) updateDatalists();
     pushHistory();
 };
@@ -1068,13 +1101,20 @@ window.editorAddItem = function () {
                 <div class="editor-group"><label>ID / 表示名:</label><input type="text" class="item-data" data-key="id" placeholder="my_item" oninput="updateDatalists()"><input type="text" class="item-data" data-key="name" placeholder="伝説の剣" oninput="updateDatalists()"></div>
                 
                 <!-- 🌟 修正：種類に「秘伝書」を追加し、選んだら下の表示を切り替える -->
-                <div class="editor-group">
-                    <label>種類:</label>
-                    <select class="item-data" data-key="type" onchange="window.toggleItemEditorUI(this); updateDatalists()">
-                        <option value="equip">装備品</option>
-                        <option value="consumable">消費アイテム</option>
-                        <option value="skill_book">📜 秘伝書 (技を覚えさせる)</option>
-                    </select>
+               <div style="display:flex; gap:10px;">
+                    <div class="editor-group" style="flex:1;">
+                        <label>種類:</label>
+                        <select class="item-data" data-key="type" onchange="window.toggleItemEditorUI(this); updateDatalists()">
+                            <option value="equip">装備品</option>
+                            <option value="consumable">消費アイテム</option>
+                            <option value="skill_book">📜 秘伝書 (技を覚えさせる)</option>
+                        </select>
+                    </div>
+                    <div class="editor-group" style="flex:1; display:flex; align-items:center; justify-content:center; background:#fffaf0; border:1px solid #d69e2e; border-radius:4px;">
+                        <label style="cursor:pointer; color:#dd6b20; font-weight:bold; margin:0;">
+                            <input type="checkbox" class="item-data" data-key="isGlobal" style="margin-right:5px;"> 👑 貴重品 (周回持越し)
+                        </label>
+                    </div>
                 </div>
 
                 <div class="editor-group"><label>価格 (G):</label><input type="number" class="item-data" data-key="price" value="500"></div>
@@ -1614,7 +1654,7 @@ function getEditorJSONData() {
             inputs.forEach(input => {
                 const key = input.getAttribute("data-key");
                 if (key === "id" && input.value) eid = input.value;
-                else if (["hp", "tech", "exp", "baseDmg", "baseDef", "dropMoney", "dropExp", "maxShock", "maxHeat", "maxElec", "recShock", "recHeat", "recElec", "revShock", "revHeat", "revElec", "atkShock", "atkHeat", "atkElec",
+                else if (["hp", "tech", "exp", "baseDmg", "baseDef", "dropMoney", "dropExp", "dropRate", "maxShock", "maxHeat", "maxElec",  "recShock", "recHeat", "recElec", "revShock", "revHeat", "revElec", "atkShock", "atkHeat", "atkElec",
           "limit_maxHp", "limit_tech", "limit_exp", "limit_baseDmg", "limit_baseDef", "limit_maxShock", "limit_maxHeat", "limit_maxElec", "limit_recShock", "limit_recHeat", "limit_recElec" // 🌟追加
          ].includes(key)) e[key] = Number(input.value) || 0;
                 else if (key === "ai_move_type") e[key] = input.value;
@@ -1645,15 +1685,27 @@ function getEditorJSONData() {
     if (itemBlocks.length > 0) {
         finalJSON.ITEMS = {};
         itemBlocks.forEach(block => {
-            const inputs = block.querySelectorAll(".item-data"); let item = {}; let iid = `custom_item_${Date.now()}`;
+            const inputs = block.querySelectorAll(".item-data"); 
+            let item = {}; 
+            let iid = `custom_item_${Date.now()}`;
+            
             inputs.forEach(input => {
                 const key = input.getAttribute("data-key");
                 if (key === "id" && input.value) iid = input.value;
-                if (["price", "addTech", "addExp", "addDmg", "addDef", "atkShock", "atkHeat", "atkElec", "effectPower", "addMaxShock", "addMaxHeat", "addMaxElec", "range", "addMaxMp", "addMaxSt"].includes(key)) item[key] = Number(input.value) || 0;
-                else if (key === "aa") item[key] = window.encodeAA(input.value); 
-                else item[key] = input.value;
+                
+                // 🌟 修正：チェックボックス（貴重品）か数値か文字列かで振り分ける
+                if (key === "isGlobal") {
+                    item[key] = input.checked;
+                } else if (["price", "addTech", "addExp", "addDmg", "addDef", "atkShock", "atkHeat", "atkElec", "effectPower", "addMaxShock", "addMaxHeat", "addMaxElec", "range", "addMaxMp", "addMaxSt"].includes(key)) {
+                    item[key] = Number(input.value) || 0;
+                } else if (key === "aa") {
+                    item[key] = window.encodeAA(input.value); 
+                } else {
+                    item[key] = input.value;
+                }
             });
-            item.id = iid; finalJSON.ITEMS[iid] = item;
+            item.id = iid; 
+            finalJSON.ITEMS[iid] = item;
         });
     }
 
@@ -1719,18 +1771,19 @@ function getEditorJSONData() {
                     stepObj.enableSpReset = getBool(14);
                     stepObj.enableMultiEquip = getBool(15);
                     stepObj.enableTension = getBool(16);
-                    stepObj.enableMpSt = getBool(17); // 🌟 追加：状態保存
+                    stepObj.enableMpSt = getBool(17); 
+                    stepObj.enableEvolution = getBool(18); // 🌟 追加
                     
-                    // 数値入力は18番目からスタートにズレる
-                    stepObj.maxLevel = getNum(18, 0); 
-                    stepObj.maxItemCount = getNum(19, 0);
-                    stepObj.maxSkills = getNum(20, 0); 
-                    stepObj.maxPlayerCount = getNum(21, 50);
-                    stepObj.battleMemberCount = getNum(22, 3); 
-                    stepObj.maxEquipCount = getNum(23, 1); 
-                    stepObj.timeLimit = getNum(24, 0); 
-                    stepObj.turnLimit = getNum(25, 0);
-                    stepObj.maxPartyCost = getNum(26, 0);
+                    // 数値入力は19番目からスタートにズレる
+                    stepObj.maxLevel = getNum(19, 0); 
+                    stepObj.maxItemCount = getNum(20, 0);
+                    stepObj.maxSkills = getNum(21, 0); 
+                    stepObj.maxPlayerCount = getNum(22, 50);
+                    stepObj.battleMemberCount = getNum(23, 3); 
+                    stepObj.maxEquipCount = getNum(24, 1); 
+                    stepObj.timeLimit = getNum(25, 0); 
+                    stepObj.turnLimit = getNum(26, 0);
+                    stepObj.maxPartyCost = getNum(27, 0);
                 }
 
 // ② getEditorJSONData 内の skillBlocks（技）の保存部分
@@ -1863,6 +1916,12 @@ function getEditorJSONData() {
                     stepObj.viewType = getVal(0, "top");
                     stepObj.mapData = getVal(1, "..........");
                     stepObj.events = getVal(2, "");
+                }else if (type === "end") {
+                    stepObj.clearMode = getVal(0, "delete");
+                    stepObj.keepMoney = getBool(1, true);
+                    stepObj.keepItems = getBool(2, true);
+                    stepObj.keepChars = getBool(3, true);
+                    stepObj.loopNext = getVal(4, "start");
                 }
                 stepsArray.push(stepObj);
             });
@@ -1984,8 +2043,13 @@ window.editorTestPlayScene = function (sceneId) {
                     if (!data.json.ENEMY_MASTER || !data.json.ENEMY_MASTER[eId]) errorMsgs.push(`・${stepLabel} で指定された敵「${eId}」のデータが存在しません！`);
                 });
             }
-            if (step.type === "give" && !["money", "exp", "orb_shinsei"].includes(step.target)) {
-                if (!data.json.ITEMS || !data.json.ITEMS[step.target]) errorMsgs.push(`・${stepLabel} (入手/没収) で指定されたアイテム「${step.target}」が存在しません！`);
+            if (step.type === "give") {
+                // 🌟 修正：お金などは「能力増減(stat_change)」に統一されたためエラーを出す
+                if (["money", "exp", "orb_shinsei"].includes(step.target)) {
+                    errorMsgs.push(`・${stepLabel} (入手/没収) で「${step.target}」が指定されています。（※お金やパラメータの増減は『能力増減(stat_change)』ステップを使用してください）`);
+                } else if (!data.json.ITEMS || !data.json.ITEMS[step.target]) {
+                    errorMsgs.push(`・${stepLabel} (入手/没収) で指定されたアイテム「${step.target}」が存在しません！`);
+                }
             }
             if (step.type === "join_party") {
                 // 🌟 修正：エディタ上に無ければ、ゲームの初期データ(INITIAL_PLAYER_TEAM)の中も探しにいく！
@@ -2330,12 +2394,14 @@ window.loadDefaultEnemies = function () {
             let val = eObj[key];
             if (key === "id") inp.value = eid;
             else if (key === "skills" && Array.isArray(val)) inp.value = val.join(',');
-            else if (key === "aa") applyAAToEditor(inp, val); // 🌟 修正
+            else if (key === "aa") applyAAToEditor(inp, val);
+            // 🌟 以下の新項目を復元対象に加える
+            else if (key === "dropItem") inp.value = val || "";
+            else if (key === "dropRate") inp.value = val || 0;
             else if (val !== undefined) inp.value = val;
         });
     });
 };
-
 window.loadDefaultItems = function () {
     if (!confirm("現在の【アイテム】エディタの内容をクリアして、チュートリアルデータを読み込みますか？")) return;
     document.getElementById("edit-items").innerHTML = "";
@@ -2349,9 +2415,14 @@ window.loadDefaultItems = function () {
             const key = inp.getAttribute("data-key");
             let val = iObj[key];
             if (key === "id") inp.value = iid;
-            else if (key === "aa") applyAAToEditor(inp, val); // 🌟 修正
+            else if (key === "aa") applyAAToEditor(inp, val);
+            // 🌟 貴重品チェックボックスの復元
+            else if (key === "isGlobal") inp.checked = !!val;
             else if (val !== undefined) inp.value = val;
         });
+        // 🌟 アイテムの種類（秘伝書など）に応じて表示を切り替える処理を呼ぶ
+        const typeSelect = block.querySelector('[data-key="type"]');
+        if (typeSelect) window.toggleItemEditorUI(typeSelect);
     });
 };
 
@@ -2649,11 +2720,15 @@ window.editorDuplicateStep = function (stepId) {
     const origInputs = original.querySelectorAll('.step-data');
     const newInputs = newBlock.querySelectorAll('.step-data');
     origInputs.forEach((inp, i) => {
-        if (newInputs[i]) {
-            newInputs[i].value = inp.value;
-            if (inp.classList.contains('aa-input')) updateAAPreview(newInputs[i]);
-        }
-    });
+            if (newInputs[i]) {
+                if (inp.type === "checkbox") {
+                    newInputs[i].checked = inp.checked;
+                } else {
+                    newInputs[i].value = inp.value;
+                }
+                if (inp.classList.contains('aa-input')) updateAAPreview(newInputs[i]);
+            }
+        });
 
     // 元の要素のすぐ下に移動
     original.parentNode.insertBefore(newBlock, original.nextSibling);
@@ -2677,7 +2752,11 @@ window.editorDuplicateScene = function (sid) {
         const newInputs = newBlock.querySelectorAll('.step-data');
         origInputs.forEach((inp, i) => {
             if (newInputs[i]) {
-                newInputs[i].value = inp.value;
+                if (inp.type === "checkbox") {
+                    newInputs[i].checked = inp.checked;
+                } else {
+                    newInputs[i].value = inp.value;
+                }
                 if (inp.classList.contains('aa-input')) updateAAPreview(newInputs[i]);
             }
         });
@@ -3413,7 +3492,9 @@ const KEY_DICT = {
     "next": "nx", "targetId": "ti", "flagName": "fn", "operator": "op", "flagValue": "fv",
     "gameType": "gt", "difficulty": "df", "rewards": "rw", 
     "targetItem": "tm", /* 🌟修正：ti が被っていたので tm に変更！ */
-    "targetCount": "tc", "trueNext": "tn", "falseNext": "fnx"
+    "targetCount": "tc", "trueNext": "tn", "falseNext": "fnx",
+    "clearMode": "cm", "keepMoney": "km", "keepItems": "ki", "keepChars": "kc", "loopNext": "ln"
+
 };
 const REVERSE_KEY_DICT = Object.fromEntries(Object.entries(KEY_DICT).map(([k, v]) => [v, k]));
 
@@ -3601,7 +3682,10 @@ window.refreshFlowchartData = function () {
             if (step.type === 'end') isEnd = true;
 
             if (step.type === 'jump') addEdge(step.next, 'ジャンプ');
-            
+                // 🌟 追加：endノードがloopかkeepの場合、次のシーンへの矢印を紫の破線で描く
+                if (step.type === 'end' && (step.clearMode === 'loop' || step.clearMode === 'keep')) {
+                    addEdge(step.loopNext, 'クリア後', '#805ad5', true);
+                }
             if (step.type === 'choice' && Array.isArray(step.choices)) {
                 step.choices.forEach(c => addEdge(c.next, c.text));
             }
@@ -4176,28 +4260,30 @@ function fillStepInputs(step, inputs) {
     if (!step || !inputs || inputs.length === 0) return;
 
     if (step.type === "system_set") {
-        // 🌟 修正：順番をHTMLと完全一致させる
         const boolKeys =[
             "enableLevelUp", "enableResistance", "enableAttribute", "enableStatus", 
             "enablePartyBattle", "enableTactical", "enableAnalyze", "skipHitDice", 
             "enableItemUse", "enableEquipChange", "enableEscape", "enableScout", 
             "enableTimeSystem", "enablePermaDeath", "enableSpReset", "enableMultiEquip", 
-            "enableTension", "enableMpSt" // 🌟 追加
+            "enableTension", "enableMpSt", "enableEvolution" // 🌟 追加
         ];
 
         boolKeys.forEach((key, i) => {
-            if (inputs[i]) inputs[i].checked = step[key] !== undefined ? step[key] : false;
+            // 新規追加された項目でデータがない場合はデフォルトを true にする
+            let defValue = (key === "enableEvolution") ? true : false;
+            if (inputs[i]) inputs[i].checked = step[key] !== undefined ? step[key] : defValue;
         });
 
-        if (inputs[18]) inputs[18].value = step.maxLevel || 0;
-        if (inputs[19]) inputs[19].value = step.maxItemCount || 0;
-        if (inputs[20]) inputs[20].value = step.maxSkills || 0;
-        if (inputs[21]) inputs[21].value = step.maxPlayerCount || 50;
-        if (inputs[22]) inputs[22].value = step.battleMemberCount || 3; 
-        if (inputs[23]) inputs[23].value = step.maxEquipCount || 1; 
-        if (inputs[24]) inputs[24].value = step.timeLimit || 0;
-        if (inputs[25]) inputs[25].value = step.turnLimit || 0;
-        if (inputs[26]) inputs[26].value = step.maxPartyCost || 0;
+        // 🌟 インデックスのズレを調整
+        if (inputs[19]) inputs[19].value = step.maxLevel || 0;
+        if (inputs[20]) inputs[20].value = step.maxItemCount || 0;
+        if (inputs[21]) inputs[21].value = step.maxSkills || 0;
+        if (inputs[22]) inputs[22].value = step.maxPlayerCount || 50;
+        if (inputs[23]) inputs[23].value = step.battleMemberCount || 3; 
+        if (inputs[24]) inputs[24].value = step.maxEquipCount || 1; 
+        if (inputs[25]) inputs[25].value = step.timeLimit || 0;
+        if (inputs[26]) inputs[26].value = step.turnLimit || 0;
+        if (inputs[27]) inputs[27].value = step.maxPartyCost || 0;
     }
     // 🌟 修正：メッセージ系のAA復元処理のバグを修正
     else if (step.type === "msg") { 
@@ -4341,6 +4427,29 @@ function fillStepInputs(step, inputs) {
         if (inputs[0]) inputs[0].value = step.viewType || "top"; 
         if (inputs[1]) inputs[1].value = step.mapData || ""; 
         if (inputs[2]) inputs[2].value = step.events || ""; 
+    }else if (step.type === "end") {
+        if (inputs[0]) {
+            inputs[0].value = step.clearMode || "delete";
+            // 🌟 修正：ロード時にUIの表示/非表示とヒントを強制更新する
+            const root = inputs[0].parentElement;
+            const opts = root.querySelector('.loop-opts');
+            const hint = root.querySelector('.mode-hint');
+            
+            if (step.clearMode === 'loop') {
+                if(opts) opts.style.display = 'block';
+                if(hint) { hint.innerText = '【二周目】能力を引き継いで最初からやり直します。物語（フラグ）と日数はリセットされます。'; hint.style.color = '#dd6b20'; }
+            } else if (step.clearMode === 'keep') {
+                if(opts) opts.style.display = 'none';
+                if(hint) { hint.innerText = '【後日談】フラグも日数もそのまま維持し、平和になった世界を冒険し続けます。'; hint.style.color = '#38a169'; }
+            } else {
+                if(opts) opts.style.display = 'none';
+                if(hint) { hint.innerText = '【終了】セーブデータを完全に削除し、タイトル画面へ戻ります。'; hint.style.color = '#718096'; }
+            }
+        }
+        if (inputs[1]) inputs[1].checked = step.keepMoney !== false;
+        if (inputs[2]) inputs[2].checked = step.keepItems !== false;
+        if (inputs[3]) inputs[3].checked = step.keepChars !== false;
+        if (inputs[4]) inputs[4].value = step.loopNext || "start";
     }
 }
 
