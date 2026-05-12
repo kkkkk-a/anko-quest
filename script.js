@@ -280,19 +280,20 @@ window.loadGame = async function () {
     } catch (e) { console.error("ロード失敗", e); }
 };
 window.deleteSaveData = async function () {
-    if (confirm("現在の進行データ（セーブデータ）を削除しますか？\n（この操作は元に戻せません）")) {
-        // 🌟 修正：第一引数にストア名(STORE_SAVE)を指定
+    if (confirm("【警告】現在の進行データ（セーブデータ）を削除しますか？\n※装備やレベル、現在の物語の場所が消えます。")) {
+        
+        // 1. 進行データを削除
         await deleteFromIndexedDB(STORE_SAVE, 'slot1');
 
-        if (confirm("クリア回数や引き継ぎ特典（グローバルフラグ）も完全に初期化しますか？\n「はい」を選ぶと、ゲームを初めて起動した状態に戻ります。")) {
-            // 🌟 修正：LocalStorageではなくIndexedDBのグローバルデータを消去
+        if (confirm("【さらに警告】クリア回数や周回特典も完全に初期化しますか？\n※「はい」を選ぶと、クリアボーナスも貰えなくなり、完全に最初からになります。")) {
+            // 2. グローバルフラグ（クリア回数など）も削除
             await deleteFromIndexedDB(STORE_GLOBAL, 'flags');
-            alert("すべてのデータを完全に削除しました。");
+            alert("すべてのデータを完全に消去しました。");
         } else {
-            alert("進行データのみを削除しました。（グローバルフラグは維持されます）");
+            alert("進行データのみ削除しました。（クリア回数は維持されます）");
         }
 
-        await checkSaveData();
+        await checkSaveData(); // ボタンの表示を更新
     }
 };
 let state = {
@@ -647,63 +648,66 @@ window.getFace = async function (char) {
 window.jumpTo = function (sceneId) {
     if (typeof mapState !== 'undefined') mapState.isJumpingToScene = false;
 
-    // マップの重力ループ停止
+    // タイマー・ループ系の停止
     if (typeof mapState !== 'undefined' && mapState.loopId) {
         clearInterval(mapState.loopId);
         mapState.loopId = null;
     }
-    
-    // 🌟 ここに1行追加！：ジャンプ・移動タイマーの確実な抹殺
     if (typeof clearMapTimers === 'function') clearMapTimers();
-
-    // アクションミニゲームのループ停止
     if (typeof agState !== 'undefined') {
         if (agState.loopId) { clearInterval(agState.loopId); clearTimeout(agState.loopId); agState.loopId = null; }
         if (agState.qteTimeout) { clearTimeout(agState.qteTimeout); agState.qteTimeout = null; }
         agState.isPlaying = false;
     }
+    if (typeof turnTimerInterval !== 'undefined' && turnTimerInterval) clearInterval(turnTimerInterval);
 
-    // 🌟 修正1：現在進行中のタイマー・演出を「完全に切断」する！
-    // これをしないと、タイトルに戻った後に古いメッセージが勝手に進めてしまう
+    // ==========================================
+    // 🌟 バトル・盤面フラグの完全強制切断
+    // ==========================================
     state.inBattle = false;
     state.isPrepPhase = false;
+    state.partyBattle = null; 
+    state.tacData = null;     
     state.isAnimating = false;
-    isSkipping = false; // 進行を止める
+    isSkipping = false; 
+
+    // バトル系グローバルフラグの初期化
+    state.shingariActive = false;
+    state.battleFlags = { guaranteeHit: false, transformCrit: false, guaranteeDodge: false, counterActive: false, statBuff: 0, earnedMoney: 0, earnedExp: 0, resUpShock: false, resUpElec: false, scoutedList: [] };
+    state.turnCount = 1; // ターンリセット
+
+    // UIのゴミ（ダイスボードやカットインなど）を強制消去
+    const elementsToHide = ["dice-board", "battle-cutin", "timer-display", "pvp-timer-display", "warning-layer", "story-choices", "story-dice-area"];
+    elementsToHide.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = "none"; });
+
+    // 操作ロックを強制解除（フリーズ防止）
+    const appContainer = document.querySelector(".app-container");
+    if (appContainer) appContainer.style.pointerEvents = "auto";
     
-    // 🌟 追加：文字送り中なら、その処理も強制停止！
     if (typeof currentMsgResolve === "function" && currentMsgResolve) {
         currentMsgResolve();
     }
-    
-    if (typeof turnTimerInterval !== 'undefined' && turnTimerInterval) clearInterval(turnTimerInterval);
+    // ==========================================
 
     if (!SCENARIO[sceneId] || SCENARIO[sceneId].length === 0) {
-        console.error("Missing or Empty Scene:", sceneId);
         console.error("Missing or Empty Scene:", sceneId);
         showToast(`🚨 エラー: シーン「${sceneId}」が存在しないか、空っぽです！`, "error");
         forceReturnFromError();
         return;
     }
 
-    // 🌟 最重要：バトル系の進行フラグをここで「強制切断」し、裏で走っている非同期ループを殺す
-    state.isAnimating = false;
-    isSkipping = false;
-    if (typeof turnTimerInterval !== 'undefined' && turnTimerInterval) clearInterval(turnTimerInterval);
-
-    // 現在のシーンIDを更新（これにより、executeAttackSequence 内で return されるようになる）
-    state.lastBattleSceneId = state.currentSceneId; // 飛ぶ前のシーンを記憶
+    // 現在のシーンIDを更新
+    state.lastBattleSceneId = state.currentSceneId; 
     state.currentSceneId = sceneId;
     state.currentStepIndex = 0;
     state.isWaitingChoice = false;
 
-    // テストプレイUIの制御
+    // UI表示の制御
     const exitBtn = document.getElementById("btn-exit-test");
     if (exitBtn) exitBtn.style.display = state.isTestPlay ? "block" : "none";
     const sysBtn = document.getElementById("system-menu-btn");
     if (sysBtn) sysBtn.style.display = state.isTestPlay ? "none" : "block";
 
-    document.getElementById("story-choices").style.display = "none";
-    document.getElementById("story-dice-area").style.display = "none";
     document.getElementById("story-message-box").style.display = "block";
 
     saveGame();
@@ -716,47 +720,80 @@ function initResistance(char, isPlayer = false) {
     char.curShock = stats.maxShock || 100; char.curHeat = stats.maxHeat || 100; char.curElec = stats.maxElec || 100;
     char.breakShock = 0; char.breakHeat = 0; char.breakElec = 0;
 }
-// ==========================================
-// 🔠 変数展開エンジン（テキスト中の変数を実際の数値に置き換える）
-// ==========================================
 window.expandVariables = async function (str) {
     if (typeof str !== "string") return str;
     if (!str.includes("{")) return str;
 
     const gf = (await loadFromIndexedDB(STORE_GLOBAL, 'flags')) || {};
 
-    return str.replace(/\{([^}]+)\}/g, (match, key) => {
+    // 🌟 第1段階：通常の変数（{yaruo.hp} など）を展開して数値や文字にする
+    let expandedStr = str.replace(/\{([^{}?:]+)\}/g, (match, key) => {
         key = key.trim();
 
         // 1. システム変数
         if (key === "money") return state.money || 0;
-        // 🌟 追加：新生の宝珠を変数として表示可能にする
         if (key === "orb_shinsei" || key === "orbShinsei") return state.orbShinsei || 0;
         if (key === "day") return state.day || 1;
         if (key === "timePeriod" || key === "time") return state.timePeriod || 0;
 
-        // 2. 個別キャラのステータス指定 (例: yaruo.atkHeat)
+        // 2. グローバルフラグ
+        if (key.startsWith("G_") && gf[key] !== undefined) return gf[key];
+
+        // 3. 進行フラグ
+        if (state.flags[key] !== undefined) return state.flags[key];
+
+        // 4. パーティの並び順指定 (例: p1.name)
+        const matchArray = key.match(/^([pe])(\d+)\.(.+)$/i);
+        if (matchArray) {
+            const isPlayer = matchArray[1].toLowerCase() === 'p';
+            const index = parseInt(matchArray[2], 10) - 1;
+            const targetTeam = isPlayer ? state.player : state.enemy;
+            if (targetTeam[index] && targetTeam[index][stat] !== undefined) return targetTeam[index][stat];
+        }
+
+        // 5. 個別キャラのID指定 (例: yaruo.affection)
         if (key.includes(".")) {
             const [cId, stat] = key.split(".");
-            const p = state.player.find(x => x.id === cId || x.originalId === cId);
+            let p = state.player.find(x => x.id === cId || x.originalId === cId) || 
+                    state.enemy.find(x => x.id === cId || x.originalId === cId);
             if (p && p[stat] !== undefined) return p[stat];
         }
 
-
-        // 3. グローバルフラグ
-        if (key.startsWith("G_") && gf[key] !== undefined) return gf[key];
-
-        // 4. 進行フラグ
-        if (state.flags[key] !== undefined) return state.flags[key];
-
-        // 5. 見つからなければ、パーティ先頭キャラのステータスを試す
+        // 6. 見つからなければ先頭キャラのステータス
         if (state.player[0] && state.player[0][key] !== undefined) return state.player[0][key];
 
-        // どこにも無ければそのまま（エラー回避）
         return match;
     });
-};
 
+    // 🌟 第2段階：動的分岐（三項演算子）の処理
+    expandedStr = expandedStr.replace(/\{([^?]+)\?([^:]+):([^}]+)\}/g, (match, condition, trueStr, falseStr) => {
+        try {
+            const result = new Function('return ' + condition)();
+            return result ? trueStr.trim() : falseStr.trim();
+        } catch (e) {
+            // 🌟 修正：文字列比較などで new Function が落ちた場合の安全なフォールバック
+            let parts = condition.split(/(===|!==|==|!=|>=|<=|>|<)/);
+            if (parts.length === 3) {
+                let left = parts[0].trim();
+                let op = parts[1].trim();
+                let right = parts[2].trim();
+                let res = false;
+                if (!isNaN(left) && !isNaN(right)) { left = Number(left); right = Number(right); }
+                if (op === "==" || op === "===") res = (left == right);
+                if (op === "!=" || op === "!==") res = (left != right);
+                if (op === ">=") res = (left >= right);
+                if (op === "<=") res = (left <= right);
+                if (op === ">") res = (left > right);
+                if (op === "<") res = (left < right);
+                return res ? trueStr.trim() : falseStr.trim();
+            }
+            console.warn("動的分岐の計算に失敗しました:", condition);
+            return falseStr.trim();
+        }
+    });
+
+    return expandedStr;
+};
 window.nextStory = async function () {
     if (state.isWaitingChoice) return;
     isSkipping = false;
@@ -824,7 +861,7 @@ window.nextStory = async function () {
         if (step.enableTimeSystem !== undefined) state.enableTimeSystem = step.enableTimeSystem;
         if (step.enableMultiEquip !== undefined) state.enableMultiEquip = step.enableMultiEquip;
         if (step.enableTactical !== undefined) state.enableTactical = step.enableTactical;
-        // 🌟 修正：人数の変更と、はみ出しメンバーの装備自動回収
+        if (step.enableEvolution !== undefined) state.enableEvolution = step.enableEvolution;
         let prevMemberCount = state.battleMemberCount || 3;
         if (step.battleMemberCount !== undefined) {
             state.battleMemberCount = Math.max(1, Number(step.battleMemberCount));
@@ -1491,22 +1528,106 @@ window.nextStory = async function () {
         if (isMatch) jumpTo(step.true_next);
         else jumpTo(step.false_next);
 
-    } else if (step.type === "end") {
-        // 🌟 修正：ゲームクリア時もIndexedDBを更新
+    }else if (step.type === "end") {
         let gf = await loadFromIndexedDB(STORE_GLOBAL, 'flags') || {};
         gf["G_CLEAR_COUNT"] = (Number(gf["G_CLEAR_COUNT"]) || 0) + 1;
         await saveToIndexedDB(STORE_GLOBAL, 'flags', gf);
 
         if (state.isTestPlay) {
-            alert("テスト終了");
+            alert("テストプレイ終了（ENDノード到達）");
             state.isTestPlay = false;
             changeView("view-editor");
-        } else {
-            await deleteFromIndexedDB(STORE_SAVE, 'slot1');
-            await checkSaveData();
-            changeView("view-title");
+            return;
         }
+
+        // 🌟 続行モード（そのまま続ける）
+        if (step.clearMode === "keep") {
+            // ユーザーへの説明を追加
+            alert("【クリア後モード開始】\n物語の進行状況（フラグ）や時間はそのままに自由に冒険できます！");
+            showToast("クリア後モード：続行中", "success");
+            
+            let nextScene = step.loopNext || "start";
+            saveGame(true);
+            jumpTo(nextScene);
+            return;
+        }
+
+
+        if (step.clearMode === "loop") {
+            // ユーザーへの説明を詳細化
+            alert("【二周目：強くてニューゲーム開始】\n能力や装備を引き継ぎつつ、世界の状態（イベント進行）をリセットして最初から物語をやり直します！");
+            
+            // 引き継がないものをリセット
+            if (!step.keepMoney) { state.money = 0; state.orbShinsei = 0; }
+            if (!step.keepItems) { 
+                // 🌟 修正：全消去する前に「👑 貴重品 (isGlobal)」だけを抽出して保護する
+                let protectedInv = {};
+                let protectedEqs = [];
+                
+                // 消費アイテムの保護
+                Object.keys(state.inventory).forEach(itemId => {
+                    if (ITEMS[itemId] && ITEMS[itemId].isGlobal) {
+                        protectedInv[itemId] = state.inventory[itemId];
+                    }
+                });
+                
+                // 装備品の保護
+                state.ownedEquips.forEach(eid => {
+                    if (ITEMS[eid] && ITEMS[eid].isGlobal) {
+                        protectedEqs.push(eid);
+                    }
+                });
+
+                // 装備中（外されて消える予定）の装備品も、貴重品なら在庫に回収する
+                state.player.forEach(p => {
+                    let eqList = Array.isArray(p.equips) ? p.equips : (p.equip ? [p.equip] : []);
+                    eqList.forEach(eid => {
+                        if (eid && ITEMS[eid] && ITEMS[eid].isGlobal) {
+                            protectedEqs.push(eid);
+                        }
+                    });
+                });
+
+                // リセットした上で、保護した貴重品だけを戻す
+                state.inventory = protectedInv; 
+                state.ownedEquips = protectedEqs; 
+            }
+
+            if (!step.keepChars) {
+                let sourceTeam = (window.customPlayerTeam !== null && window.customPlayerTeam.length > 0) ? window.customPlayerTeam : INITIAL_PLAYER_TEAM;
+                state.player = [JSON.parse(JSON.stringify(sourceTeam[0]))];
+                state.player.forEach(p => p.originalId = p.id);
+            } else {
+                // キャラを引き継ぐ場合でも、全回復＆状態異常・戦闘フラグはリセットする
+                state.player.forEach(p => {
+                    p.hp = p.maxHp; p.mp = p.maxMp; p.st = p.maxSt;
+                    cleanUpCharacterBattleFlags(p); 
+                });
+            }
+            
+            // 進行フラグ・日数は無条件でリセット（グローバルは維持）
+            state.flags = {};
+            state.day = 1; state.timePeriod = 1;
+            
+            // ゴーストやバトルのゴミを掃除
+            state.enemy = [];
+            state.inBattle = false; state.isPrepPhase = false; state.partyBattle = null; state.tacData = null;
+            
+            // 🌟 loopNext は、keepと共通のジャンプ先として扱う
+            let nextScene = step.loopNext || "start";
+            saveGame(true); // 周回用データとして上書き保存
+            jumpTo(nextScene);
+            return;
+        }
+
+        // 🌟 従来モード（セーブデータを削除してタイトルへ）
+        alert("🎉 ゲームクリア！おめでとうございます！");
+        await deleteFromIndexedDB(STORE_SAVE, 'slot1');
+        await checkSaveData();
+        cleanupGameState();
+        changeView("view-title");
     }
+
     resizeAllAAs(); 
 }
 
@@ -1642,27 +1763,21 @@ window.switchShopTab = async function (mode) {
             }
         }
 
-        // 装備品の売却リスト（予備判定対応）
-        for (let i = 0; i < state.ownedEquips.length; i++) {
-            const id = state.ownedEquips[i];
+        // 🌟 装備品の売却リスト（ここを修正）
+        // かばんの中にある装備をカウントする
+        let bagCounts = {};
+        state.ownedEquips.forEach(eid => { bagCounts[eid] = (bagCounts[eid] || 0) + 1; });
+
+        for (const id of Object.keys(bagCounts)) {
             const item = ITEMS[id];
-
-            let equippedCount = 0;
-            state.player.forEach(p => {
-                let eqList = Array.isArray(p.equips) ? p.equips : (p.equip ? [p.equip] : []);
-                equippedCount += eqList.filter(e => e === id).length;
-            });
-            const sameTypeIndex = state.ownedEquips.slice(0, i + 1).filter(eid => eid === id).length;
-            const canSell = sameTypeIndex > equippedCount; // 装備している総数より多く持っていれば売れる
-
+            if (!item) continue;
+            const count = bagCounts[id];
             const sellPrice = Math.floor(item.price / 2);
-            const btnText = canSell ? "売る" : "装備中";
-            const btnAttr = canSell ? `onclick="sellItemAt(${i}, ${sellPrice})"` : "disabled";
-
-            const statText = getEquipStatText(item);
             const resolvedAA = await resolveAA(item.aa);
+            const statText = getEquipStatText(item);
 
-            htmls.push(`<div class="prep-char-card"><div class="item-aa-box" style="margin-right:10px;"><pre class="item-aa" style="font-size:10px;">${resolvedAA}</pre></div><div style="flex:1"><b>${item.name}</b> ${statText}<br><small>売値: ${sellPrice} G</small></div><button class="cmd-btn" style="min-width:70px;" ${btnAttr}>${btnText}</button></div>`);
+            // sellItemAt の引数を id に変更
+            htmls.push(`<div class="prep-char-card"><div class="item-aa-box" style="margin-right:10px;"><pre class="item-aa" style="font-size:10px;">${resolvedAA}</pre></div><div style="flex:1"><b>${item.name}</b> ${statText}<br><small>売値: ${sellPrice} G (所持数:${count})</small></div><button class="cmd-btn" style="min-width:70px;" onclick="sellItemAt('${id}', ${sellPrice})">売る</button></div>`);
         }
 
         if (htmls.length === 0) htmls.push("<div style='text-align:center; color:#718096; padding:20px;'>売れるものがないようだ……</div>");
@@ -1699,6 +1814,7 @@ window.buyItem = function (id) {
     saveGame();
     switchShopTab('buy');
 };
+
 window.sellItem = function (id, type, price) {
     const item = ITEMS[id];
     // ▼ 在庫がゼロ以下の場合は強制終了（お金増殖防止）
@@ -1718,41 +1834,25 @@ window.sellItem = function (id, type, price) {
         switchShopTab('sell');
     }
 };
-window.sellItemAt = function (idx, price) {
-    const id = state.ownedEquips[idx];
+// 🌟 修正：第1引数を idx (番号) から id (アイテムID) に変更
+window.sellItemAt = function (id, price) {
     const item = ITEMS[id];
     if (!item) return;
 
-    if (confirm(`${item.name} を ${price} G で売りますか？`)) {
-        state.money = Math.min(99999999, state.money + price);
-        state.ownedEquips.splice(idx, 1);
+    if (confirm(`${item.name} を ${price} G で売りますか？\n（※現在誰かが装備中のものは含まれません）`)) {
+        // 🌟 かばんの中から対象のIDを1つだけ探して削除する
+        const targetIdx = state.ownedEquips.indexOf(id);
+        
+        if (targetIdx !== -1) {
+            state.ownedEquips.splice(targetIdx, 1); // かばんから1つ消す
+            state.money = Math.min(99999999, state.money + price); // お金を増やす
 
-        let totalOwned = state.ownedEquips.filter(e => e === id).length;
-        let totalEquipped = 0;
-
-        state.player.forEach(p => {
-            let eqList = Array.isArray(p.equips) ? p.equips : (p.equip ? [p.equip] : []);
-            totalEquipped += eqList.filter(e => e === id).length;
-        });
-
-        if (totalEquipped > totalOwned) {
-            // 🚨 修正：控えメンバー（配列の後ろ）から優先的に装備を剥がす
-            for (let i = state.player.length - 1; i >= 0; i--) {
-                let p = state.player[i];
-                if (Array.isArray(p.equips)) {
-                    let slotIdx = p.equips.indexOf(id);
-                    if (slotIdx !== -1) {
-                        p.equips[slotIdx] = null; // スロットを空にする
-                        if (p.equip === id) p.equip = null; // 互換用も消す
-                        break; // 1個売っただけなので、1人から外せばOK
-                    }
-                }
-            }
+            sysLog(`[ショップ] ${item.name} を売却しました`);
+            saveGame();
+            switchShopTab('sell'); // 画面を更新
+        } else {
+            alert("エラー：かばんの中にそのアイテムがありませんお！");
         }
-
-        sysLog(`[ショップ] ${item.name} 売却`);
-        saveGame();
-        switchShopTab('sell');
     }
 };
 window.leaveShop = function () {
@@ -1796,30 +1896,25 @@ window.updatePrepUI = function() {
 
         for (let s = 0; s < maxEq; s++) {
             let opts = `<option value="none">-- 装備なし --</option>`;
+            
+            // 🌟 修正：かばんの中身 ＋ 今このスロットに着けているものを合算してリストを作る
+            let availableEquips = [...state.ownedEquips];
+            if (p.equips[s] && p.equips[s] !== "none") {
+                availableEquips.push(p.equips[s]);
+            }
+
             let equipCounts = {};
-            state.ownedEquips.forEach(eid => equipCounts[eid] = (equipCounts[eid] || 0) + 1);
+            availableEquips.forEach(eid => equipCounts[eid] = (equipCounts[eid] || 0) + 1);
 
             Object.keys(equipCounts).forEach(eid => {
-                let equippedByOthersCount = 0;
-                state.player.forEach((other, idx) => {
-                    let otherEqs = Array.isArray(other.equips) ? other.equips : (other.equip ? [other.equip] :[]);
-                    if (idx !== i) {
-                        equippedByOthersCount += otherEqs.filter(e => e === eid).length;
-                    }
-                });
-
-                // 🌟 修正：自分が「他のスロット」に装備している数を計算
                 let myOtherSlotsCount = p.equips.filter((e, eIdx) => eIdx !== s && e === eid).length;
-
-                // 🌟 修正：重複装備が禁止されている場合、自分が他のスロットで着けているならリストに出さない！
                 let isBlockedByRule = (!state.enableMultiEquip && myOtherSlotsCount > 0);
 
-                // 在庫が（他人の分 ＋ 自分の他のスロットの分）より多いか、すでにこのスロットに装備している場合だけ表示
-                if ((equipCounts[eid] > (equippedByOthersCount + myOtherSlotsCount) && !isBlockedByRule) || p.equips[s] === eid) {
+                if (!isBlockedByRule || p.equips[s] === eid) {
                     const item = ITEMS[eid];
                     if (item) {
                         let statPlain = getEquipStatText(item).replace(/<[^>]*>?/gm, '');
-                        opts += `<option value="${eid}" ${p.equips[s] === eid ? 'selected' : ''}>${item.name} ${statPlain}</option>`;
+                        opts += `<option value="${eid}" ${p.equips[s] === eid ? 'selected' : ''}>${item.name} ${statPlain} (残${equipCounts[eid]})</option>`;
                     }
                 }
             });
@@ -1912,17 +2007,55 @@ window.changeEquip = (pi, slot, eid) => {
     let p = state.player[pi];
     if (!p.equips) p.equips = p.equip ? [p.equip] :[];
 
-    // 🌟 追加：重複装備禁止ルールなら、他のスロットから引っぺがす（移動させる）
+    // 🌟 修正：今装備しているものをかばんに戻す
+    let oldEquip = p.equips[slot];
+    if (oldEquip && oldEquip !== "none") state.ownedEquips.push(oldEquip);
+
+    // 🌟 修正：新しく着けるものをかばんから減らす
+    if (eid !== "none") {
+        let idx = state.ownedEquips.indexOf(eid);
+        if (idx !== -1) state.ownedEquips.splice(idx, 1);
+    }
+
+    // 重複装備禁止ルール（スロット間の移動処理）
     if (!state.enableMultiEquip && eid !== "none") {
         for (let i = 0; i < (state.maxEquipCount || 1); i++) {
             if (i !== slot && p.equips[i] === eid) {
-                p.equips[i] = null; // 古いスロットを空にする
+                state.ownedEquips.push(eid); // 古いスロットの分をかばんに戻す
+                p.equips[i] = null;
             }
         }
     }
 
     p.equips[slot] = (eid === "none") ? null : eid;
     updatePrepUI();
+};
+
+window.changeEquipInCamp = function (pi, slot, eid) {
+    let p = state.player[pi];
+    if (!p.equips) p.equips = p.equip ? [p.equip] : [];
+
+    let oldEquip = p.equips[slot];
+    if (oldEquip && oldEquip !== "none") state.ownedEquips.push(oldEquip);
+
+    if (eid !== "none") {
+        let idx = state.ownedEquips.indexOf(eid);
+        if (idx !== -1) state.ownedEquips.splice(idx, 1);
+    }
+
+    if (!state.enableMultiEquip && eid !== "none") {
+        for (let i = 0; i < (state.maxEquipCount || 1); i++) {
+            if (i !== slot && p.equips[i] === eid) {
+                state.ownedEquips.push(eid);
+                p.equips[i] = null;
+            }
+        }
+    }
+
+    p.equips[slot] = (eid === "none") ? null : eid;
+    renderGrowModal();
+    appendEquipChangeButton(pi);
+    showToast("装備を変更したお！", "info");
 };
 window.finishPrep = () => { 
     if (state.player[state.activeP].hp <= 0) { 
@@ -2086,7 +2219,16 @@ window.generateCharCardHTML = async function (char, mode, extraData = {}) {
     const stats = getStats(char, isPlayer);
     const hpPer = (char.hp / char.maxHp * 100).toFixed(1);
     const traitName = TRAITS[char.trait]?.name || "なし";
+    const traitDesc = TRAITS[char.trait]?.desc || "特に効果はない";
 
+    // 共通の特性ラベル（ツールチップ付き）を作成
+    const traitLabelHtml = `
+    <div class="tooltip-container" style="display:inline-block;">
+        <span style="background:#edf2f7; color:#553c9a; padding:1px 6px; border-radius:4px; font-size:9px; font-weight:bold; border:1px solid #d6bcfa;">
+            特: ${traitName}
+        </span>
+        <div class="tooltip-text" style="font-weight:normal; color:#e2e8f0;">${traitDesc}</div>
+    </div>`;
     // 共通の表示パーツを取得
     let faceAA = await getFace(char);
     let resHtml = getMiniResBars(char, isPlayer);
@@ -2125,7 +2267,7 @@ window.generateCharCardHTML = async function (char, mode, extraData = {}) {
             ? `<div id="${sidePrefix}-order-${extraData.idx}" class="p-order-badge ${badgeClass}">${displayDice}</div>` 
             : `<div id="${sidePrefix}-order-${extraData.idx}" class="p-order-badge" style="display:none;"></div>`;
 
-        let traitHtml = `<div style="font-size:9px; color:#553c9a; font-weight:bold; text-align:center; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">特: ${traitName}</div>`;
+        let traitHtml = `<div style="text-align:center; margin-bottom:2px;">${traitLabelHtml}</div>`;
 
         // 🌟 追加：パーティーバトルでもステータス（技・経・攻・防）と装備を表示する
         let pStatsHtml = `
@@ -2169,7 +2311,8 @@ window.generateCharCardHTML = async function (char, mode, extraData = {}) {
             ${orderHtml}
             <div id="popup-${char.id}" style="display:none;"></div>
             <div class="p-name">${char.name}</div>
-            <div class="p-aa"><pre>${faceAA}</pre></div>
+            <!-- 🌟 修正：IDを付与してリサイズ関数が捕捉できるようにする -->
+            <div class="p-aa" id="card-aa-box-${char.id}"><pre id="card-aa-pre-${char.id}">${faceAA}</pre></div>
             <div class="p-status" style="display:flex; flex-direction:column; min-height:100px;">
                 ${statusHtml}${tenHtml}${traitHtml}
                 ${pStatsHtml} <!-- 🌟 ここに追加 -->
@@ -2206,7 +2349,12 @@ window.generateCharCardHTML = async function (char, mode, extraData = {}) {
                     <span style="color:#2b6cb0; font-weight:bold;">技:${stats.tech}</span>
                     <span style="color:#38a169; font-weight:bold;">経:${stats.exp}</span>
                 </div>
-                <div style="font-size:10px; color:#553c9a; font-weight:bold; margin-bottom:4px;">特性: ${traitName} ${statusHtml}</div>
+
+                <!-- 🌟 ここを以下の3行に書き換える -->
+                <div style="margin-bottom:4px; display:flex; align-items:center; gap:5px;">
+                    ${traitLabelHtml} ${statusHtml}
+                </div>
+
                 ${equipHtml}
                 
                 <!-- 🌟 準備/リザルト画面でも属性相性を表示 -->
@@ -2386,15 +2534,13 @@ window.calculateDamage = function (attacker, defender, skill, isCrit) {
 
     return dmg;
 };
-// ==========================================
-// 最終的な属性相性を計算する共通関数
-// ==========================================
-function getFinalAffinity(defender, element, attackerTrait = "none") {
+window.getFinalAffinity = function(defender, element, attackerTrait = "none") {
     if (element === "none") return "nm";
 
     let affinity = defender["aff_" + element] || "nm";
     const AFF_ORDER = ["wk", "nm", "hl", "rs", "nu", "rp", "ab"];
 
+    // 1. 装備品による相性の上書き（より強い耐性を優先）
     let eqList = Array.isArray(defender.equips) ? defender.equips : (defender.equip ? [defender.equip] : []);
     eqList.forEach(eid => {
         if (eid && ITEMS[eid] && ITEMS[eid]["aff_" + element] && ITEMS[eid]["aff_" + element] !== "nm") {
@@ -2404,19 +2550,25 @@ function getFinalAffinity(defender, element, attackerTrait = "none") {
     });
 
     let defTrait = defender.trait || "none";
-    // 🌟 修正：かたやぶりが無視する特性リストを完全網羅
+    
+    // 2. 特性「かたやぶり」による防御特性の無効化
     if (attackerTrait === "mold_breaker") {
         const ignoreTraits = ["metal_body", "sturdy", "levitate", "magic_bounce", "ultra_body", "wonder_guard", "hard_body", "evasion_step", "gamble_body", "iron_wall", "pressure", "triple_mirror", "status_mirror", "break_mirror", "gourmet_body", "energy_convert", "overflow", "reverse_affinity"];
         if (ignoreTraits.includes(defTrait)) defTrait = "none";
     }
 
-    if (defTrait === "levitate" && element === "earth") affinity = "nu";
-    if (defender.status === "fragile") affinity = "wk"; 
-    if (defender.status === "fortress") affinity = "nu"; 
+    // 3. 特殊な状態異常による強制上書き（最優先）
+    if (defender.status === "fragile") affinity = "wk"; // 脆弱：すべて弱点
+    else if (defender.status === "fortress") affinity = "nu"; // 堅牢：すべて無効
+    else if (defender.status === "flat") affinity = "hl"; // 均一：すべて半減
+    
+    // 4. 特性による完全無効化
+    if (defTrait === "levitate" && element === "earth") affinity = "nu"; // ふゆう：大地無効
 
+    // 5. 耐性ダウン（ブレイク効果など）の計算
     let downSteps = 0;
-    if (defTrait !== "ultra_body") {
-        if (defender.status === "rot") downSteps++;
+    if (defTrait !== "ultra_body") { // ウルトラボディは耐性ダウンを無効化
+        if (defender.status === "rot") downSteps++; // 腐敗：1段階ダウン
         if (attackerTrait === "guard_break") downSteps++;
         if (attackerTrait === element + "_break") downSteps += 2;
     }
@@ -2424,21 +2576,20 @@ function getFinalAffinity(defender, element, attackerTrait = "none") {
     if (downSteps > 0) {
         let idx = AFF_ORDER.indexOf(affinity);
         if (idx !== -1) {
-            idx = Math.min(AFF_ORDER.length - 1, idx + downSteps);
+            // 弱点(wk)より下には下がらないように計算
+            idx = Math.max(0, idx - downSteps); 
             affinity = AFF_ORDER[idx];
         }
     }
 
-    // 🌟 修正：あべこべ（逆転）が確実に計算・表示されるようにする
+    // 6. 最終処理：特性「あべこべ（逆転）」
     if (defTrait === "reverse_affinity") {
         const reverseMap = { "wk": "ab", "nm": "rp", "hl": "nu", "rs": "rs", "nu": "hl", "rp": "nm", "ab": "wk" };
         if (reverseMap[affinity]) affinity = reverseMap[affinity];
     }
-    
-    if (defender.status === "flat") affinity = "hl";
 
     return affinity;
-}
+};
 
 function processResTurnEnd(char, isPlayer = false) {
     if (!state.enableResistance) return;
@@ -2628,10 +2779,34 @@ async function checkLevelUp(p) {
         await wait(2500);
     }
 }
-
 function getStatusIcon(char) {
     if (!char.status || char.status === "none" || char.hp <= 0) return "";
-    return `<div style="text-align:center; margin-bottom:2px;"><span style="background:#e53e3e; color:#fff; font-size:9px; padding:1px 4px; border-radius:3px; font-weight:bold;">${STATUS_NAMES[char.status]} ${char.statusTurn}T</span></div>`;
+    
+    const sName = STATUS_NAMES[char.status];
+    // 状態異常の簡単な説明文を定義
+    const statusDesc = {
+        poison: "毎ターン最大HPの10%ダメージ", deadly_poison: "毎ターン全耐性にダメージ", rot: "受ける全属性の相性が1段階悪化",
+        freeze: "回避時、相手の命中に+3の補正", frostbite: "防御力が半減する", paralysis: "攻撃時、自身の命中に-3の補正",
+        burn: "毎ターンHPに20の固定ダメージ", blaze: "毎ターン全耐性に固定ダメージ", sleep: "戦闘ダイスが半減。回避不可",
+        confusion: "戦闘ダイス勝利時、50%で自傷", bleed: "受けるダメージが2倍になる", harden: "防御力が2倍になる",
+        drown: "技の反動ダメージが2倍になる", charm: "クリティカル(10)以外外れる", seal: "アイテム使用不可",
+        slow: "パーティバトルの行動順が最後尾", fast: "パーティバトルの行動順が最速", focus: "命中ダイスに+1の補正",
+        reverse: "戦闘ダイスの勝敗と行動順が逆転", stone: "行動・回避不可", provoke: "通常攻撃しか出せない",
+        aging: "耐性の自動回復(REC)が半減", protect: "耐性へのダメージを無効化", invincible: "HPへのダメージを無効化",
+        stagnate: "ブレイクからの復旧ターンが2倍", aggressive: "与えるダメージが2倍", exception: "直前の技が使用不可",
+        repetition: "直前の技しか使用不可", doom: "3ターン後に確実な死が訪れる", surehit: "お互いの攻撃が必中になる",
+        fragile: "受ける全属性が『弱点』になる", fortress: "受ける全属性が『無効』になる", immovable: "技の反動ダメージが0になる",
+        rage: "与ダメ3倍、被ダメ2倍", flat: "受ける全属性が『半減』になる", hp_curse: "最大HPが半分になる",
+        res_curse: "全耐性の最大値が半分になる", dodge: "相手の命中率を半分にする"
+    };
+
+    const desc = statusDesc[char.status] || "状態異常";
+
+    return `
+    <div class="tooltip-container" style="text-align:center; margin-bottom:2px; display:inline-block;">
+        <span style="background:#e53e3e; color:#fff; font-size:9px; padding:1px 4px; border-radius:3px; font-weight:bold;">${sName} ${char.statusTurn}T</span>
+        <div class="tooltip-text">${desc}</div>
+    </div>`;
 }
 
 // ミニ耐性ゲージを生成する関数
@@ -2687,12 +2862,20 @@ window.updateUI = async function () {
     const bf = document.querySelector(".battle-field"); // 1vs1用のコンテナ
     
     // パーティ用のコンテナが無ければ作る
+    // パーティ用のコンテナが無ければ作る
     if (!pf) {
         pf = document.createElement("div"); 
         pf.id = "party-field"; 
         pf.className = "party-field scroll-area";
         pf.innerHTML = `<div class="party-row" id="pf-enemy"></div><div class="party-row" id="pf-player"></div>`;
-        bf.parentNode.insertBefore(pf, bf);
+        
+        // 🌟 修正：bfが存在する場合のみ直前に挿入。なければ親(battle-view等)に追加する。
+        const container = document.getElementById("view-battle");
+        if (bf && bf.parentNode) {
+            bf.parentNode.insertBefore(pf, bf);
+        } else if (container) {
+            container.appendChild(pf);
+        }
     }
 
     // ==========================================
@@ -2794,17 +2977,27 @@ window.updateUI = async function () {
     };
 
     // 🌟 修正：各行の margin-bottom を 2px → 1px に詰め、高さを微調整
-    const pStatusStr = p.status && p.status !== "none" ? `<span style="background:#e53e3e; color:#fff; font-size:10px; padding:1px 3px; border-radius:3px; margin-left:4px;">${STATUS_NAMES[p.status]} ${p.statusTurn}T</span>` : "";
-    let pTenHtml = state.enableTension && p.tension !== 0 ? `<div style="color:#dd6b20; font-weight:bold; height:12px; line-height:12px; font-size:11px; margin-bottom:1px;">🔥${p.tension}</div>` : `<div style="height:1px;"></div>`;
+    const pStatusStr = getStatusIcon(p); // 👈 以前の長い<span>をやめて、ツールチップ付きの関数を呼ぶ
     
+    // 🌟 漏れていた定義：特性のラベルを作成
+    const pTraitName = TRAITS[p.trait]?.name || "なし";
+    const pTraitDesc = TRAITS[p.trait]?.desc || "特に効果はない。";
+    const pTraitLabelHtml = `
+    <div class="tooltip-container" style="display:inline-block;">
+        <span style="background:#edf2f7; color:#553c9a; padding:1px 6px; border-radius:4px; font-size:9px; font-weight:bold; border:1px solid #d6bcfa;">
+            特: ${pTraitName}
+        </span>
+        <div class="tooltip-text" style="font-weight:normal; color:#e2e8f0;">${pTraitDesc}</div>
+    </div>`;
+
     document.getElementById("p-stats").innerHTML = `
         ${pTenHtml}
         <div style="height:14px; line-height:14px; margin-bottom:1px; font-size:12px;">
             <span style="color:#2b6cb0">技:${pS.tech}</span> <span style="color:#38a169">経:${pS.exp}</span> / 攻:${pS.dmg + Math.floor(pS.tech / 10)} 防:${pS.def + Math.floor(pS.exp / 10)} 
         </div>
         ${buildResourceRow(p)}
-        <div style="color:#553c9a; font-weight:bold; min-height:14px; margin-bottom:1px; display:flex; align-items:center; font-size:12px;">
-            特性: ${TRAITS[p.trait]?.name || "なし"}${pStatusStr}
+        <div style="min-height:14px; margin-bottom:1px; display:flex; align-items:center; font-size:12px; gap:5px;">
+            ${pTraitLabelHtml} ${pStatusStr}
         </div>
         <div style="font-size:10px; height:12px; line-height:12px;">装備:${eqNames}</div>
         ${getAffinityIcons(p)}
@@ -2820,18 +3013,28 @@ window.updateUI = async function () {
     let eEqNames = eEqList.map(eid => (eid && ITEMS[eid]) ? ITEMS[eid].name : "").filter(n => n).join("/");
     if (!eEqNames) eEqNames = "なし";
 
-    const eStatusStr = e.status && e.status !== "none" ? `<span style="background:#e53e3e; color:#fff; font-size:10px; padding:1px 3px; border-radius:3px; margin-left:4px;">${STATUS_NAMES[e.status]} ${e.statusTurn}T</span>` : "";
-    let eTenHtml = state.enableTension && e.tension !== 0 ? `<div style="color:#dd6b20; font-weight:bold; height:12px; line-height:12px; font-size:11px; margin-bottom:1px;">🔥${e.tension}</div>` : `<div style="height:1px;"></div>`;
-    const eTraitName = typeof TRAITS !== 'undefined' && TRAITS[e.trait] ? TRAITS[e.trait].name : "なし";
+    // 🌟 ここを修正：味方と同じく getStatusIcon 関数を使うようにします
+    const eStatusStr = getStatusIcon(e); 
     
+    let eTenHtml = state.enableTension && e.tension !== 0 ? `<div style="color:#dd6b20; font-weight:bold; height:12px; line-height:12px; font-size:11px; margin-bottom:1px;">🔥${e.tension}</div>` : `<div style="height:1px;"></div>`;
+    const eTraitName = TRAITS[e.trait]?.name || "なし";
+    const eTraitDesc = TRAITS[e.trait]?.desc || "特に効果はない。";
+    const eTraitLabelHtml = `
+    <div class="tooltip-container" style="display:inline-block;">
+        <span style="background:#edf2f7; color:#553c9a; padding:1px 6px; border-radius:4px; font-size:9px; font-weight:bold; border:1px solid #d6bcfa;">
+            特: ${eTraitName}
+        </span>
+        <div class="tooltip-text" style="font-weight:normal; color:#e2e8f0;">${eTraitDesc}</div>
+    </div>`;
+
     document.getElementById("e-stats").innerHTML = `
         ${eTenHtml}
         <div style="height:14px; line-height:14px; margin-bottom:1px; font-size:12px;">
             <span style="color:#2b6cb0">技:${eS.tech}</span> <span style="color:#38a169">経:${eS.exp}</span> / 攻:${eS.dmg + Math.floor(eS.tech / 10)} 防:${eS.def + Math.floor(eS.exp / 10)} 
         </div>
         ${buildResourceRow(e)}
-        <div style="color:#553c9a; font-weight:bold; min-height:14px; margin-bottom:1px; display:flex; align-items:center; font-size:12px;">
-            特性: ${eTraitName}${eStatusStr}
+        <div style="min-height:14px; margin-bottom:1px; display:flex; align-items:center; font-size:12px; gap:5px;">
+            ${eTraitLabelHtml} ${eStatusStr}
         </div>
         <div style="font-size:10px; height:12px; line-height:12px;">装備:${eEqNames}</div>
         ${getAffinityIcons(e)}
@@ -3418,11 +3621,11 @@ window.executeAction = async function (action, param) {
                 targetChar.statusTurn = 4;
                 targetChar.statusAppliedTurn = state.turnCount; 
                 await showMsg(`${targetChar.name} は 【${STATUS_NAMES[item.inflict_status]}】状態になった！`);
-                await wait(800); // 🌟 追加
+                await wait(800);
             }
             await updateUI(); 
-            if (!skipCounter) await executeAttackSequence(e, [p], null, true);
-
+            // 🌟 修正：敵が生きている場合のみ反撃ターンを発生させる
+            if (!skipCounter && e.hp > 0) await executeAttackSequence(e, [p], null, true);
         } else if (action === "equip") {
             if (!Array.isArray(p.equips)) p.equips = p.equip ? [p.equip] : [];
             let oldEquip = p.equips[0]; // 🌟今着けている装備を記憶
@@ -3780,8 +3983,8 @@ if (!isCounter && !state.enablePartyBattle) {
         let loopCount = state.skipHitDice ? 0 : 20;
         for (let i = 0; i < loopCount; i++) {
             if (isSkipping) break;
-            pValEl.innerText = Math.floor(Math.random() * 100); 
-            eValEl.innerText = Math.floor(Math.random() * 100);
+            pValEl.innerText = Math.floor(uiRandom() * 100); 
+            eValEl.innerText = Math.floor(uiRandom() * 100);
             await wait(40);
         }
 
@@ -4203,7 +4406,8 @@ if (!state.enablePartyBattle) {
                 await updateUI();
             }
 
-            const cDefStats = getStats(def, !isPlayerAttack, atkTrait);
+            let isDefPlayer = state.player.includes(def);
+            const cDefStats = getStats(def, isDefPlayer, atkTrait);
             let targetIsCrit = isCrit;
             if (currentDefTrait === "iron_wall" && targetIsCrit) {
                 targetIsCrit = false;
@@ -4317,7 +4521,7 @@ if (!state.enablePartyBattle) {
                 let repelDmg = currentDefTrait === "triple_mirror" ? dmg * 3 : dmg;
 
                 // 🌟 修正：共通関数を呼ぶ
-                await applyDamage(def, attacker, repelDmg, !isPlayerAttack, false);
+                await applyDamage(def, attacker, repelDmg, isDefPlayer, false);
                 await showMsg(`${def.name} は はねかえした！\n${attacker.name} に 反射ダメージ！`);
 
                 if (currentDefTrait === "status_mirror" && attacker.hp > 0 && attacker.status === "none") {
@@ -4401,7 +4605,7 @@ if (!state.enablePartyBattle) {
                 else if (isResist) { await showMsg(`効果は いまひとつのようだ……`); await wait(800); }
 
                 // ダメージ適用（ここで死亡・自爆・食いしばり判定が走る）
-                let dmgResult = await applyDamage(attacker, def, dmg, isPlayerAttack, isFinisherInstaKill);
+                 let dmgResult = await applyDamage(attacker, def, dmg, isDefPlayer, isFinisherInstaKill);
 
                 if (state.enableTension && dmgResult.actualDmg > 0) {
                     let currentDefTrait = def.trait || "none";
@@ -5453,7 +5657,8 @@ if (act.action === 'attack' && act.param === 'normal' && actor.trait === "spread
             let eAlive = state.enemy.filter(e => e.hp > 0);
             targetList = [...pAlive, ...eAlive];
         } else if (act.targetIdx !== -1 && act.targetIdx !== undefined) {
-            let isAllyTarget = (act.action === "item" && ["heal", "cure_status", "buff", "rec_res", "res_up", "guarantee_hit", "transform_crit", "guarantee_dodge", "counter"].includes(ITEMS[act.param]?.effect)) || (skill && skill.target_type === "ally_single");
+            // 🌟 修正：ally_all などのターゲットタイプも含めて味方対象技かを判定
+            let isAllyTarget = (act.action === "item" && ["heal", "cure_status", "buff", "rec_res", "res_up", "guarantee_hit", "transform_crit", "guarantee_dodge", "counter"].includes(ITEMS[act.param]?.effect)) || (skill && ["ally_single", "ally_all", "self", "field_all"].includes(skill.target_type));
             
             // 🌟 一時変数 t をやめて、mainTarget に代入する
             mainTarget = act.isPlayer ? (isAllyTarget ? state.player[act.targetIdx] : state.enemy[act.targetIdx]) : (isAllyTarget ? state.enemy[act.targetIdx] : state.player[act.targetIdx]);
@@ -5706,7 +5911,18 @@ if (act.action === 'attack' && act.param === 'normal' && actor.trait === "spread
                         await showMsg(`＞＞ ${mainTarget.name} の 怒りの反撃！ ＜＜`); await wait(800);
                         
                         // isCounterフラグ(第4引数)を true にして、戦闘ダイスを省略する
-                        await executeAttackSequence(mainTarget, [actor], skill, true);
+                        if (mainTarget.hp > 0 && actor.hp > 0) {
+                    await showMsg(`＞＞ ${mainTarget.name} の 怒りの反撃！ ＜＜`); await wait(800);
+                    // 🌟 修正：executeAttackSequence はキューを破壊するため、直接ダメージ計算に流す
+                    let eStats = getStats(mainTarget, false);
+                    let aStats = getStats(actor, true);
+                    // 単純な物理攻撃として処理（怒りなので2倍）
+                    let dmg = Math.max(1, (eStats.dmg + Math.floor(eStats.tech/10)) - (aStats.def + Math.floor(aStats.exp/10)));
+                    dmg *= 2; 
+                    
+                    await applyDamage(mainTarget, actor, dmg, false, false);
+                    if (actor.hp <= 0) await showMsg(`${actor.name} は たおれた！`);
+                }
                     }
                 }
             }
@@ -5786,7 +6002,40 @@ async function checkPartyDead() {
     // 🌟 追加：報酬の清算とレベルアップを安全に行うための内部関数
     const processRewards = async () => {
         let totalMoney = 0; let totalExp = 0;
-        state.enemy.forEach(e => { totalMoney += (e.dropMoney || 0); totalExp += (e.dropExp || 0); });
+        let droppedItems = []; // 🌟 追加：獲得アイテムのリスト
+
+        state.enemy.forEach(e => { 
+            if (e && e.hp <= 0) {
+                totalMoney += (e.dropMoney || 0); 
+                totalExp += (e.dropExp || 0); 
+                
+                // 🌟 追加：アイテムドロップ判定
+                if (e.dropItem && e.dropRate > 0) {
+                    let rate = e.dropRate || 0;
+                    if ((Math.floor(Math.random() * 100) + 1) <= rate) {
+                        const itemData = ITEMS[e.dropItem];
+                        if (itemData) {
+                            droppedItems.push(itemData); // リストに追加
+                            
+                            // 実際にインベントリに入れる処理
+                            if (itemData.type === "consumable" || itemData.type === "skill_book") {
+                                let current = state.inventory[e.dropItem] || 0;
+                                let max = state.maxItemCount > 0 ? state.maxItemCount : 9999;
+                                if (current < max) {
+                                    state.inventory[e.dropItem] = current + 1;
+                                }
+                            } else {
+                                state.ownedEquips.push(e.dropItem);
+                            }
+                        }
+                    }
+                }
+
+                e.dropMoney = 0;
+                e.dropExp = 0;
+                e.dropRate = 0; // 二重ドロップ防止
+            }
+        });
         state.money = Math.min(99999999, state.money + totalMoney);
         
         if (state.enableLevelUp && totalExp > 0) {
@@ -5856,11 +6105,15 @@ async function checkPartyDead() {
 
         if (state.isPvP) { endPvP(); return true; }
 
-        // 🌟 修正：先ほど作った関数で安全に報酬を受け取る
+        // 🌟 修正：アイテムも受け取る
         let rewards = await processRewards();
-        await showMsg(`${rewards.totalMoney} G を手に入れた！`); await wait(800);
+        let msg = `${rewards.totalMoney} G を手に入れた！`;
+        if (rewards.droppedItems.length > 0) {
+            msg += `\nアイテム を落としていった！`;
+        }
+        await showMsg(msg); await wait(800);
 
-        openResultScreen(rewards.totalMoney, rewards.totalExp);
+        openResultScreen(rewards.totalMoney, rewards.totalExp, rewards.droppedItems);
         return true;
     }
 
@@ -5874,7 +6127,16 @@ async function checkPartyDead() {
             jumpTo(state.battleLoseNext);
         } else {
             await showMsg(`めのまえが まっくらになった……`);
-            setTimeout(async () => { if (state.isTestPlay) { alert("テスト終了"); state.isTestPlay = false; changeView("view-editor"); } else { await deleteFromIndexedDB('slot1'); await checkSaveData(); changeView("view-title"); } }, 3000);
+            setTimeout(async () => { 
+                if (state.isTestPlay) { 
+                    alert("テスト終了"); state.isTestPlay = false; changeView("view-editor"); 
+                } else { 
+                    // 🌟 修正：タイトルへ戻る前に完全初期化を行う
+                    cleanupGameState();
+                    await checkSaveData(); 
+                    changeView("view-title"); 
+                } 
+            }, 3000);
         }
         return true;
     }
@@ -6232,16 +6494,18 @@ const canUseSkill = (sid) => {
         let sk = SKILLS[sid];
         if (!sk) return false;
 
-        // 🌟 追加：コスト不足なら候補から外す
+        // 🌟 追加：コスト不足なら候補から外す（これをしないと無駄行動して死ぬ）
         if (state.enableMpSt) {
             let reqMp = sk.cost_mp || 0;
             let reqSt = sk.cost_st || 0;
             if (enemy.mp < reqMp || enemy.st < reqSt) return false;
         }
 
+        // ブレイク中の反動技使用不可のチェック
         if (sk.recoil_shock && enemy.breakShock > 0) return false;
         if (sk.recoil_heat && enemy.breakHeat > 0) return false;
         if (sk.recoil_elec && enemy.breakElec > 0) return false;
+        
         return true;
     };
 
@@ -6904,7 +7168,7 @@ window.startPvPBattle = async function () {
     myParty.forEach(p => initResistance(p, true));
     myParty.forEach(p => p.id = p.id + (isHost ? "_host" : "_guest"));
     opponentParty.forEach(e => e.id = e.id + (!isHost ? "_host" : "_guest"));
-    // ▼ 追加：PvPに参加する全員の「初手フラグ」と「経過ターン」を初期化
+    state.pvpMyInitialCount = myParty.length;
     [...myParty, ...opponentParty].forEach(c => {
         c.isFirstTurn = true;
         c.turnInBattle = 0;
@@ -6928,6 +7192,21 @@ window.startPvPBattle = async function () {
         e.act_base_skill = "none"; e.act_base_skill2 = "none";
         e.trigger_id = null; e.death_scene = null; // ギミックイベントも無効化
     });
+    state.pvpBackupSettings = {
+        enableLevelUp: state.enableLevelUp,
+        enableResistance: state.enableResistance,
+        enableAttribute: state.enableAttribute,
+        skipHitDice: state.skipHitDice,
+        enablePartyBattle: state.enablePartyBattle,
+        enableItemUse: state.enableItemUse,
+        enableEquipChange: state.enableEquipChange,
+        enableScout: state.enableScout,
+        timeLimit: state.timeLimit,
+        turnLimit: state.turnLimit,
+        enableSwitch: state.enableSwitch,
+        enableMultiEquip: state.enableMultiEquip
+    };
+
     // システム設定をホストのルールで強制上書き
     state.enableLevelUp = false; // 対戦では成長しない
     state.enableResistance = pvpRules.res;
@@ -6940,9 +7219,9 @@ window.startPvPBattle = async function () {
     state.pvpTimeLimit = pvpRules.timeLimit || 0;
     state.timeLimit = pvpRules.timeLimit || 0;
     state.turnLimit = pvpRules.turnLimit || 0;
-    state.enableEquipChange = pvpRules.equip ? "true" : "false"; // 装備変更(アイテム)
-    state.enableSwitch = pvpRules.switch; // 🌟 メンバー入れ替え
-    state.enableMultiEquip = pvpRules.multiEquip; // 🌟 重複装備許可
+    state.enableSwitch = pvpRules.switch; 
+    state.enableMultiEquip = pvpRules.multiEquip;
+    
     state.activeP = 0;
     state.activeE = 0;
     state.battleFlags = { guaranteeHit: false, transformCrit: false, guaranteeDodge: false, counterActive: false, statBuff: 0, earnedMoney: 0, earnedExp: 0, resUpShock: false, resUpElec: false, scoutedList: [] };
@@ -6954,7 +7233,8 @@ window.startPvPBattle = async function () {
         state.tacData = {
             initiative: pvpRules.tacInit,
             useBattleDice: pvpRules.tacDice,
-            mapGrid: pvpRules.tacMap ? pvpRules.tacMap.split('\n') : Array(9).fill("........."),
+            // 🌟 修正：改行コードのゴミ（\r）を完全に除去して安全に配列化する！
+            mapGrid: pvpRules.tacMap ? pvpRules.tacMap.split(/\r?\n/) : Array(9).fill("........."),
             phase: "setup_player", // 配置フェーズからスタート
             selectedUnit: null,
             movedUnit: null,
@@ -6986,6 +7266,7 @@ window.startPvPBattle = async function () {
 // ==========================================
 // PvP用：完全同期型・乱数生成器
 // ==========================================
+const originalMathRandom = Math.random;
 let pvpSeed = 0;
 let isPvPRandomActive = false;
 
@@ -6998,32 +7279,20 @@ function seededRandom() {
     return (t >>> 0) / 4294967296;
 }
 
-function enablePvPRandom(seed) {
+window.enablePvPRandom = function(seed) {
     pvpSeed = seed || 123456789;
     isPvPRandomActive = true;
-}
-function disablePvPRandom() {
+};
+window.disablePvPRandom = function() {
     isPvPRandomActive = false;
-}
-
-// 🌟 修正：演出用（UIやアニメーション）の乱数は同期シードを消費しないように分離する
-const originalMathRandom = Math.random;
-window.uiRandom = function () {
+};
+Math.random = function () {
+    if (isPvPRandomActive) return seededRandom();
     return originalMathRandom();
 };
 
-Math.random = function () {
-    // もし現在の処理の呼び出し元（スタックトレース）がUI関連なら、オリジナルの乱数を返す
-    try {
-        const stack = new Error().stack;
-        if (stack && (stack.includes("showToast") || stack.includes("playGlitchEffect") || stack.includes("flash") || stack.includes("showCutin"))) {
-            return originalMathRandom();
-        }
-    } catch (e) { }
-
-    // バトルのダメージ計算などは同期されたシードを使う
-    if (isPvPRandomActive) return seededRandom();
-
+// UIや演出など「対戦結果に関係ない場所」で使う乱数はこっち！
+window.uiRandom = function () {
     return originalMathRandom();
 };
 // ==========================================
@@ -7154,19 +7423,20 @@ async function checkPvPDead() {
 
     return false;
 }
-
-// PvP終了・タイトルへ戻る処理
 window.endPvP = function (disconnect = true) {
     state.isPvP = false;
-    if (typeof disablePvPRandom === "function") disablePvPRandom(); // 乱数同期解除
+    
+    // 🌟 追加：タイマーと乱数同期を確実に停止
+    if (typeof stopPvPTimer === "function") stopPvPTimer();
+    if (typeof disablePvPRandom === "function") disablePvPRandom();
 
-    // 🌟 修正：disconnect が true の時だけ通信を切断する
     if (disconnect) {
         if (typeof conn !== "undefined" && conn) { conn.close(); conn = null; }
         if (typeof peer !== "undefined" && peer) { peer.destroy(); peer = null; }
     }
 
     state.tacData = null;
+    state.partyBattle = null; // 🌟 追加：行動キューを破棄
     state.isAnimating = false;
     isSkipping = false;
     document.querySelector(".app-container").style.pointerEvents = "auto";
@@ -7177,13 +7447,13 @@ window.endPvP = function (disconnect = true) {
     const battleCutin = document.getElementById("battle-cutin");
     if (battleCutin) battleCutin.style.display = "none";
 
-    // PvP開始前のデータを「確実」に復元する
-    if (state.pvpBackupPlayer) {
-        const initialPvPCount = Math.min(3, state.pvpBackupPlayer.length);
+    // --- キャラクター・アイテムの復元 ---
+     if (state.pvpBackupPlayer) {
+        // 🌟 修正：固定の3ではなく、記録しておいた「実際の出撃人数」を使う！
+        const initialPvPCount = state.pvpMyInitialCount || Math.min(3, state.pvpBackupPlayer.length);
         const scoutedInPvP = state.player.slice(initialPvPCount);
 
         state.player = JSON.parse(JSON.stringify(state.pvpBackupPlayer));
-
         scoutedInPvP.forEach(newChar => {
             if (state.player.length < state.maxPlayerCount) {
                 newChar.id = newChar.id.replace("_host", "").replace("_guest", "");
@@ -7195,6 +7465,7 @@ window.endPvP = function (disconnect = true) {
             }
         });
         delete state.pvpBackupPlayer;
+    delete state.pvpMyInitialCount; // 🌟 記録を消す
     }
 
     if (state.pvpBackupInventory) {
@@ -7206,9 +7477,20 @@ window.endPvP = function (disconnect = true) {
         delete state.pvpBackupOwnedEquips;
     }
 
-    saveGame();
+    if (state.pvpBackupSettings) {
+        Object.assign(state, state.pvpBackupSettings);
+        delete state.pvpBackupSettings;
+    }
 
-    // 🌟 修正：切断時はタイトルへ、維持時はロビーへ画面遷移
+    state.enemy = []; // 敵のゴーストデータを抹消
+
+    // 🌟 挿入箇所：キャラをきれいに掃除する
+    if (state.player) {
+        state.player.forEach(p => cleanUpCharacterBattleFlags(p));
+    }
+
+    saveGame(); // ここで保存
+
     if (disconnect) {
         alert("対戦が終了しました。タイトル画面に戻ります。");
         changeView("view-title");
@@ -7829,9 +8111,16 @@ window.updateFusionUI = function () {
         state.fusionResultType = "shinsei";
         return;
     }
-
-    // 【モード：通常/進化】
+// 【モード：通常/進化】
     if (bId === mId && base.id !== mat.id) {
+
+        // 🌟 追加：エディタで進化配合が禁止されている場合はここで弾く
+        if (state.enableEvolution === false || state.enableEvolution === "false") {
+            document.getElementById("fusion-result-preview").innerHTML = `<span style="color:#e53e3e; font-weight:bold;">この世界では、同種同士の配合（進化）は禁止されている！</span>`;
+            document.getElementById("btn-execute-fusion").disabled = true;
+            return;
+        }
+
         // 🌟 進化配合（同種 ＋ 別個体）
         document.getElementById("fusion-result-preview").innerHTML = `
             <span style="color:#38a169; font-size:16px;">🧬 進化配合 🧬</span><br>
@@ -7895,19 +8184,24 @@ window.executeFusion = function () {
         } else if (fType === "evolution") {
             // 進化配合：耐性ランダム強化
             const ATTRS = ["fire", "elec", "ice", "wind", "water", "earth", "bomb", "dark", "wave", "light", "mystic", "spirit", "gravity", "fight", "grass"];
-            const RANKS = ["wk", "nm", "hl", "rs", "nu", "rp"];
+            // 🌟 修正：ランクに "ab" (吸収) を追加し、暴落バグを防ぐ！
+            const RANKS = ["wk", "nm", "hl", "rs", "nu", "rp", "ab"];
 
-            // 反射(rp)になっていない属性だけを抽出
-            let upgradable = ATTRS.filter(attr => (newChar[`aff_${attr}`] || "nm") !== "rp");
+            // 🌟 修正：反射(rp)と吸収(ab)になっていない属性だけを抽出
+            let upgradable = ATTRS.filter(attr => {
+                let aff = newChar[`aff_${attr}`] || "nm";
+                return aff !== "rp" && aff !== "ab"; 
+            });
 
             if (upgradable.length > 0) {
                 let targetAttr = upgradable[Math.floor(Math.random() * upgradable.length)];
                 let currentRank = newChar[`aff_${targetAttr}`] || "nm";
-                let nextRank = RANKS[RANKS.indexOf(currentRank) + 1] || "rp";
+                // 🌟 修正：限界突破しないようにガード
+                let nextRank = RANKS[RANKS.indexOf(currentRank) + 1] || "ab";
                 newChar[`aff_${targetAttr}`] = nextRank;
                 alert(`🧬 進化の力が発現！\n${newChar.name} の【${ATTR_NAMES[ATTRS.indexOf(targetAttr)]}耐性】が 1段階 アップした！`);
             } else {
-                alert(`🧬 これ以上進化できない完全体だ！\n（※すべての属性が反射に到達しています）`);
+                alert(`🧬 これ以上進化できない完全体だ！\n（※すべての属性が反射・吸収に到達しています）`);
             }
         }
     }
@@ -7947,18 +8241,26 @@ window.executeFusion = function () {
     if (state.maxSkills > 0 && skillArray.length > state.maxSkills) skillArray = skillArray.slice(0, state.maxSkills);
     newChar.skills = skillArray;
 
-    // 🌟 装備品の回収
-    [base, mat].forEach(p => {
+     [base, mat].forEach(p => {
         let eqList = Array.isArray(p.equips) ? p.equips : (p.equip ? [p.equip] : []);
-        eqList.forEach(eid => { if (eid && eid !== "none") state.ownedEquips.push(eid); });
+        eqList.forEach(eid => { 
+            if (eid && eid !== "none") state.ownedEquips.push(eid); 
+        });
+        p.equips = []; p.equip = null;
     });
 
+
     // 🌟 親の削除と子供の追加
-    let idxs = [baseIdx, matIdx].sort((a, b) => b - a);
+     let idxs = [baseIdx, matIdx].sort((a, b) => b - a);
     state.player.splice(idxs[0], 1);
     state.player.splice(idxs[1], 1);
+    
+    // 🌟 追加：生まれたての子の、戦闘用見えないフラグを綺麗に掃除してあげる
+    if (typeof cleanUpCharacterBattleFlags === 'function') cleanUpCharacterBattleFlags(newChar);
+
     state.player.push(newChar);
 
+    // 🌟 プレイヤーへの親切な説明（初期SPの表示）
     alert(`🎉 配合成功！\n『${newChar.name}』が誕生し、親から ${newChar.sp} SPと技を受け継ぎました！\n（※預かり所に送られました）`);
     openFusion();
 };
@@ -7967,16 +8269,39 @@ window.finishFusion = function () { state.currentStepIndex++; saveGame(); nextSt
 // ==========================================
 // リザルト（戦闘結果・スカウト命名）機能
 // ==========================================
-window.openResultScreen = function (money, exp) {
+window.openResultScreen = async function (money, exp, droppedItems = []) {
     changeView("view-result");
+    
     state.isAnimating = false;
     const appContainer = document.querySelector('.app-container');
     if (appContainer) appContainer.classList.remove('is-processing');
     document.getElementById("res-money").innerText = money;
     document.getElementById("res-exp").innerText = exp;
 
-    // 🌟 追加：戦闘準備画面の「味方リスト」の生成ロジックを流用して、リザルト画面にねじ込む！
-    // (※ updatePrepUI とほぼ同じロジックだが、装備変更プルダウンは不要なので削った表示用HTMLを作る)
+    let dropHtml = "";
+    if (droppedItems && droppedItems.length > 0) {
+        dropHtml = `<div style="background:#ebf8ff; padding:10px; border:2px solid #3182ce; border-radius:8px; margin-top:15px;">
+            <h3 style="color:#2b6cb0; font-size:16px; margin-bottom:8px; border-bottom:1px solid #90cdf4; padding-bottom:4px;">🎁 獲得アイテム</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">`;
+        
+        for (const item of droppedItems) {
+            let aaText = "？"; 
+            if (item.aa) {
+                let decoded = window.decodeAA(item.aa);
+                // 🌟 修正：パス指定（ドット区切り）なら、resolveAA で本物を取りに行く！
+                if (decoded.includes('.') && !decoded.includes('\n')) {
+                    aaText = await resolveAA(decoded).catch(() => "🎁");
+                } else {
+                    aaText = decoded;
+                }
+            }
+            dropHtml += `<div style="display:flex; align-items:center; gap:5px; background:#fff; padding:4px 8px; border-radius:4px; border:1px solid #cbd5e0;">
+                <pre style="font-size:8px; margin:0; line-height:1; font-family:'aahub';">${aaText}</pre>
+                <span style="font-size:12px; font-weight:bold; color:#2d3748;">${item.name}</span>
+            </div>`;
+        }
+        dropHtml += `</div></div>`;
+    }
     let membersHtml = state.player.map((p, i) => {
         if (i >= (state.battleMemberCount || 3)) return ""; // 控えは表示しない
 
@@ -8004,7 +8329,6 @@ window.openResultScreen = function (money, exp) {
                 </div>
             </div>
             <div style="display:flex; flex-direction:column; gap:5px; margin-left:10px; justify-content:center;">
-                <!-- 🌟 ここが重要：リザルト画面から直接「育成モーダル」を開けるようにする！ -->
                 <button class="cmd-btn" style="${growBtnStyle}; padding:10px;" onclick="openGrowModal(${i})">${growBtnText}</button>
             </div>
         </div>`;
@@ -8019,7 +8343,7 @@ window.openResultScreen = function (money, exp) {
         const scoutArea = document.getElementById("res-scout-area");
         scoutArea.parentNode.insertBefore(resultMembersDiv, scoutArea);
     }
-    resultMembersDiv.innerHTML = `<h3 style="border-left:4px solid var(--primary); padding-left:8px; margin-bottom:10px; font-size:15px;">成長の確認</h3>` + membersHtml;
+    resultMembersDiv.innerHTML = dropHtml + `<h3 style="border-left:4px solid var(--primary); padding-left:8px; margin-bottom:10px; font-size:15px; margin-top:15px;">成長の確認</h3>` + membersHtml;
 
     // (以下、既存のスカウトキャラのUI構築などを続ける)
     let scouted = state.battleFlags.scoutedList || [];
@@ -8062,21 +8386,35 @@ window.finishResult = function () {
     scouted.forEach((c, idx) => {
         let inputName = document.getElementById(`scout-name-${idx}`).value.trim();
         
-        // 🌟 修正：サニタイズした上で名前を確定させる
         if (inputName) {
             c.name = sanitizeHTML(inputName);
         }
-        if (inputName) c.name = inputName;
 
         let baseId = c.originalId || c.id.split('_')[0];
         c.originalId = baseId;
-        const uniqueHex = Math.floor(Math.random() * 65536).toString(16).padStart(4, '0'); // 🌟 追加
-        c.id = `${baseId}_${Date.now()}_${uniqueHex}`; // 🌟 修正
+        const uniqueHex = Math.floor(Math.random() * 65536).toString(16).padStart(4, '0'); 
+        c.id = `${baseId}_${Date.now()}_${uniqueHex}`;
+
+        // 🌟 追加：敵としてのAIデータやドロップ品の「汚れ」を味方データから消し去る
+        delete c.dropMoney;
+        delete c.dropExp;
+        delete c.isBoss;
+        delete c.ai_move_type;
+        delete c.ai_move_pinch;
+        delete c.ai_cards;
+        delete c.act_base_skill;
+        delete c.act_base_skill2;
+        delete c.trigger_id;
+        delete c.trigger_scene;
+        delete c.death_scene;
+if (typeof window.hydrateData === 'function') {
+            let tempTeam = { player: [c] };
+            let hydrated = window.hydrateData(tempTeam);
+            Object.assign(c, hydrated.player[0]);
+        }
 
         if (state.player.length < state.maxPlayerCount) {
             state.player.push(c);
-            
-            // 🌟 修正：手持ち(8人)に収まったか、倉庫行きかをアラート
             if (state.player.length > 8) {
                 alert(`${c.name} は同行枠がいっぱいのため、預かり所に送られました。`);
             } else {
@@ -8389,26 +8727,23 @@ function startPvPTimer() {
         }
     }, 1000);
 }
-
 function stopPvPTimer() {
     clearInterval(pvpTimerInterval);
-    document.getElementById("pvp-timer-display").style.display = "none";
+    const display = document.getElementById("pvp-timer-display");
+    if (display)display.style.display = "none";
 }
-
-// 時間切れ時の自動行動決定（防御を詰める）
 function autoSubmitPvPCommands() {
-    if (state.partyBattle.phase !== 'command') return;
+    if (!state.isPvP || !state.partyBattle || state.partyBattle.phase !== 'command') return;
 
     // 現在入力待ちのキャラから、最大3人目までを「様子を見る」で埋める
     while (state.partyBattle.currentActorIdx < 3 && state.partyBattle.currentActorIdx < state.player.length) {
         let actor = state.player[state.partyBattle.currentActorIdx];
         if (actor && actor.hp > 0) {
-            // ▼ 修正：「防御(defense)」から「様子を見る(attack / nothing)」に変更
             state.partyBattle.actions.push({
                 isPlayer: true,
                 actorIdx: state.partyBattle.currentActorIdx,
-                action: "attack",   // 変更
-                param: "nothing",   // 変更
+                action: "attack",
+                param: "nothing",
                 targetIdx: -1
             });
         }
@@ -8517,22 +8852,35 @@ window.checkTOD = async function () {
             await showMsg(`<span style="color:#e53e3e;">【判定敗北...】</span> 押し切れなかったお...`);
             await wait(2000);
             if (state.battleLoseNext) jumpTo(state.battleLoseNext);
-            else { await showMsg(`めのまえが まっくらになった……`); setTimeout(async () => { if (state.isTestPlay) { state.isTestPlay = false; changeView("view-editor"); } else { await deleteFromIndexedDB('slot1'); changeView("view-title"); } }, 3000); }
+            else { await showMsg(`めのまえが まっくらになった……`);
+            setTimeout(async () => { 
+                if (state.isTestPlay) { 
+                    alert("テスト終了（全滅）"); state.isTestPlay = false; changeView("view-editor"); 
+                } else { 
+                    // 🌟 セーブを消さずにタイトルへ戻す
+                    alert("パーティが全滅しました……。\nタイトル画面に戻ります。最後にセーブした場所からやり直してください。");
+                    cleanupGameState();
+                    changeView("view-title"); 
+                } 
+            }, 3000);
+ }
             return true;
         }
     }
 };
 
-// ▼ 追加：控えメンバーの装備を一括で外す機能
 window.stripAllReserveEquip = function () {
     if (!confirm("控えメンバーの装備をすべて回収しますか？")) return;
 
     let stripped = false;
-    // 3番目以降（控え）のキャラをループ
     let memberLimit = state.battleMemberCount || 3;
     for (let i = memberLimit; i < state.player.length; i++) {
         let p = state.player[i];
         if (Array.isArray(p.equips) && p.equips.some(e => e !== null)) {
+            // 🌟 修正：外した装備を在庫（ownedEquips）にしっかり戻す！
+            p.equips.forEach(eid => {
+                if (eid && eid !== "none") state.ownedEquips.push(eid);
+            });
             p.equips = []; // 🌟全スロット解除
             p.equip = null; // 念のため古いデータも消去
             stripped = true;
@@ -8557,7 +8905,7 @@ window.showCutin = async function (actor) {
     document.getElementById("cutin-aa").innerText = await getFace(actor);
     document.getElementById("cutin-name").innerText = actor.name;
     const msgs = ["TARGET DESTROYED!", "撃 破 !!", "FATAL BLOW!!", "討 伐 完 了 !!", "FINISH!!"];
-    document.getElementById("cutin-msg").innerText = msgs[Math.floor(Math.random() * msgs.length)];
+    document.getElementById("cutin-msg").innerText = msgs[Math.floor(uiRandom() * msgs.length)];
 
     cutin.style.transition = "none";
     cutin.style.left = "-100%";
@@ -8639,8 +8987,8 @@ window.openFlagStatusModal = async function () {
 
     content.innerHTML = html;
     modal.style.display = "flex";
-    document.querySelector(".app-container").style.pointerEvents = "none"; // 背後を触れなくする
-    modal.style.pointerEvents = "auto"; // モーダル自体は触れるようにする
+    document.querySelector(".app-container").style.pointerEvents = "none";
+    modal.style.pointerEvents = "auto";
 };
 
 window.closeFlagStatusModal = function () {
@@ -8648,7 +8996,7 @@ window.closeFlagStatusModal = function () {
     const container = document.querySelector(".app-container");
     if (container) {
         container.style.pointerEvents = "auto";
-        container.focus(); // 🌟 追加
+        container.focus();
     }
 };
 
@@ -8694,7 +9042,6 @@ window.openMinigame = function (step) {
         `;
         document.getElementById("btn-mg-play").disabled = true;
     }
-    // 🌟 追加：ポーカー専用の「役の配当表（説明）」を表示する
     else if (step.gameType === "poker") {
         document.getElementById("mg-controls").innerHTML = `
             <div style="width:100%; background:#2d3748; padding:10px; border-radius:8px; border:2px solid #4a5568; font-size:11px; color:#e2e8f0; text-align:left; line-height:1.4;">
@@ -9143,7 +9490,6 @@ window.updateCraftUI = async function () {
                 } else {
                     hasCount = state.ownedEquips.filter(eid => eid === m.matId).length;
                 }
-
                 if (hasCount < m.req) canCraft = false; // 1つでも足りなければ作成不可
 
                 const color = hasCount >= m.req ? "#38a169" : "#e53e3e"; // 足りていれば緑、不足なら赤
@@ -10417,7 +10763,8 @@ async function checkTacticalTurnEnd() {
                 }
             })();
         }
-    } else {
+     } else {
+        // (前略：敵全員が動いたかのチェック)
         state.enemy.forEach(e => {
             if (e.hp > 0 && e.x !== undefined && !e.hasActed) isAllDone = false;
         });
@@ -10426,20 +10773,21 @@ async function checkTacticalTurnEnd() {
             await showMsg("敵のターン終了", "warning");
 
             (async () => {
-                // 🌟 追加：敵のターンが終わったので、プレイヤー全員に毒や耐性回復を適用する
-                for (let p of state.player.slice(0, state.battleMemberCount || 3)) {
-                    if (p.hp > 0 && p.x !== undefined) await processSingleCharTurnEnd(p, true);
-                }
+                // 🌟 追加：このラウンドの全行動が終わったので、世界の時間を1進める
+                state.turnCount++;
+
+                // 🌟 追加：全員に毒ダメージや自動回復、状態異常ターンの消費を適用する
+                // （processAllStatusTurnEnd 関数を使って一括処理する）
+                await processAllStatusTurnEnd();
+
                 if (await checkTacticalDead()) return;
 
+                // 状態を「プレイヤーの手番」に戻す
                 state.player.forEach(p => { p.hasActed = false; p.justEscaped = false; });
                 state.enemy.forEach(e => e.hasActed = false);
 
                 state.tacData.turn = "player";
                 state.tacData.hasEscapedThisRound = false;
-
-                // 🌟 追加：世界のターンを進める
-                state.turnCount++;
 
                 updateTacticalUI();
             })();
@@ -10566,16 +10914,17 @@ async function startEnemyTacticalTurn() {
                         safeCounter++;
                         let dx = Math.sign(e.x - target.x); 
                         let dy = Math.sign(e.y - target.y);
-
                         if (dx === 0 && dy === 0) { dx = 1; dy = 0; }
 
                         let nx = e.x + dx, ny = e.y;
-                        let isWall = state.tacData.mapGrid[ny] && state.tacData.mapGrid[ny][nx] === '#';
+                        // 🌟 修正：盤面の範囲内かを先にチェックしてエラーを防ぐ
+                        let isWall = (ny >= 0 && ny < 9 && nx >= 0 && nx < 9) ? (state.tacData.mapGrid[ny] && state.tacData.mapGrid[ny][nx] === '#') : true;
+                        
                         if (dx !== 0 && !isWall && !getUnitAt(nx, ny) && nx >= 0 && nx < 9) {
                             e.x = nx; e.y = ny; moved = true;
                         } else {
                             nx = e.x; ny = e.y + dy;
-                            isWall = state.tacData.mapGrid[ny] && state.tacData.mapGrid[ny][nx] === '#';
+                            isWall = (ny >= 0 && ny < 9 && nx >= 0 && nx < 9) ? (state.tacData.mapGrid[ny] && state.tacData.mapGrid[ny][nx] === '#') : true;
                             if (dy !== 0 && !isWall && !getUnitAt(nx, ny) && ny >= 0 && ny < 9) {
                                 e.x = nx; e.y = ny; moved = true;
                             }
@@ -10854,6 +11203,7 @@ let returnTimerId = null;
 function forceReturnFromError() {
     if (returnTimerId) return;
     state.isWaitingChoice = true;
+    document.querySelector(".app-container").style.pointerEvents = "auto"; // 追加
 
     returnTimerId = setTimeout(() => {
         const wasTestPlay = state.isTestPlay;
@@ -10873,14 +11223,20 @@ function forceReturnFromError() {
 // 🧹 システム・UI・フラグの完全初期化（クリーンアップ）
 // ==========================================
 window.cleanupGameState = function () {
+    // 🌟 追加：通信状態なら確実に切断する
+    if (typeof conn !== "undefined" && conn) { conn.close(); conn = null; }
+    if (typeof peer !== "undefined" && peer) { peer.destroy(); peer = null; }
+    if (typeof disablePvPRandom === "function") disablePvPRandom();
+
     // 1. タイマーの全停止
     if (typeof turnTimerInterval !== 'undefined' && turnTimerInterval) clearInterval(turnTimerInterval);
     if (typeof pvpTimerInterval !== 'undefined' && pvpTimerInterval) clearInterval(pvpTimerInterval);
+    if (typeof stopPvPTimer === "function") stopPvPTimer(); // 🌟 追加
     if (typeof mapState !== 'undefined' && mapState.loopId) clearInterval(mapState.loopId);
     if (typeof returnTimerId !== 'undefined' && returnTimerId) { clearTimeout(returnTimerId); returnTimerId = null; }
     if (typeof clearMapTimers === 'function') clearMapTimers();
 
-    // 🌟 修正3：現在進行中のメッセージやタイマーを強制的に「完了」させて切断する！
+    // 🌟 進行中のメッセージやタイマーを強制完了
     isSkipping = true; 
     if (typeof currentMsgResolve === "function" && currentMsgResolve) currentMsgResolve();
     if (typeof activeWaits !== "undefined") {
@@ -10915,23 +11271,18 @@ window.cleanupGameState = function () {
     state.flags = {};
 
     // 🚨 修正：プレイヤーステータスの余分なフラグを完全に掃除
-    if (state.player) {
-        state.player.forEach(p => {
-            p.tempEmotion = null; p.chargeSkillId = null; p.rechargeTurn = 0;
-            p.status = "none"; p.statusTurn = 0; p.statBuff = 0; p.tension = 0;
-            p.hasActed = false; p.justEscaped = false; p.hasBursted = false;
-            p.guaranteeHit = false; p.transformCrit = false; p.guaranteeDodge = false;
-            p.counterActive = false; p.hasDoubleStrike = false; p.hasBeenCountered = false;
-            p.turnDice = undefined; 
-        p.critCount = 0; p.hitCombo = 0; p.lastUsedSkill = null; p.skillUseCount = 0;
-        });
+     if (state.player) {
+        state.player.forEach(p => cleanUpCharacterBattleFlags(p));
     }
+    state.enemy = []; // 敵のデータも確実に空にする
 
     state.partyBattle = null;
     state.tacData = null;
     state.shingariActive = false;
     state.battleFlags = { guaranteeHit: false, transformCrit: false, guaranteeDodge: false, counterActive: false, statBuff: 0, earnedMoney: 0, earnedExp: 0, resUpShock: false, resUpElec: false, scoutedList: [] };
-
+    if (typeof closeSub === 'function') closeSub(); // コマンドメニュー閉じる
+    document.querySelectorAll(".recoil-damage-preview").forEach(el => el.remove()); // 反動プレビューの赤枠を消す
+    document.querySelectorAll(".hit-popup").forEach(el => el.remove()); // HIT等のポップアップを消す
     // システム設定のデフォルト
     state.enableLevelUp = true; state.enableResistance = false; state.enableAttribute = false;
     state.enableStatus = true; // 🌟 追加
@@ -11130,7 +11481,7 @@ window.triggerOmenTrait = async function () {
         let aStats = getStats(a.char, a.isPlayer);
         let bStats = getStats(b.char, b.isPlayer);
         let diff = (bStats.tech + bStats.exp) - (aStats.tech + aStats.exp);
-        return diff !== 0 ? diff : (Math.random() < 0.5 ? -1 : 1);
+        return diff !== 0 ? diff : (uiRandom() < 0.5 ? -1 : 1);
     });
 
     let triggered = false;
@@ -11183,7 +11534,7 @@ async function checkDead() {
     let pAlive = state.player.some(pl => pl && pl.hp > 0);
     let eAlive = state.enemy.some(en => en && en.hp > 0);
 
-    // 🌟 修正2：ここを追加！ 1vs1のタクティカル決闘中なら盤面へ帰る！
+    // 1vs1のタクティカル決闘中なら盤面へ帰る！
     if (state.tacData) {
         if (!pAlive || !eAlive) {
             state.isAnimating = false;
@@ -11193,8 +11544,7 @@ async function checkDead() {
         return false; 
     }
 
-
-    // 相打ち
+    // 🌟 修正：敵を倒した処理(e.hp <= 0)より先に、相打ちの処理を済ませてしまう
     if (!pAlive && !eAlive) {
         await showMsg(`<span style="color:#805ad5; font-size:24px;">【相打ち】</span><br>おたがいに 力尽きたお……`);
         if (state.isPvP) { endPvP(); return true; }
@@ -11202,6 +11552,7 @@ async function checkDead() {
         jumpTo(state.battleDrawNext || state.battleLoseNext);
         return true;
     }
+
     if (e && e.hp <= 0) {
         await showMsg(`${e.name} を たおした！`);
         await wait(800); 
@@ -11295,7 +11646,12 @@ async function checkDead() {
             } else {
                 await showMsg(`めのまえが まっくらになった……`);
                 if (state.isTestPlay) { alert("テスト終了"); state.isTestPlay = false; changeView("view-editor"); }
-                else { await deleteFromIndexedDB(STORE_SAVE, 'slot1'); await checkSaveData(); changeView("view-title"); }
+                else { 
+                    // 🌟 修正：タイトルへ戻る前に完全初期化を行う
+                    cleanupGameState();
+                    await checkSaveData(); 
+                    changeView("view-title"); 
+                }
             }
             return true;
         } else {
@@ -11335,27 +11691,31 @@ window.processEscapeSuccess = async function (p, e) {
     state.isAnimating = false;
     saveGame();
 
-    // 🌟 修正：しんがり（固定値+20を廃止し、フラグを立てる処理に一本化）
+    // 1. PvP（対人戦）の場合は即座に降参扱い
+    if (state.isPvP) {
+        await showMsg(`白旗をあげた！\nあなたの 敗北 です。`);
+        if (conn) conn.send({ type: 'PVP_GAME_OVER', result: '対戦相手がギブアップしました' });
+        endPvP();
+        return;
+    }
+
+    // 2. 特性：しんがりの処理
     if (p.trait === "rearguard" && state.player.includes(p)) {
-        state.shingariActive = true; // 盤面ターン終了まで基礎攻防1.2倍
-        await showMsg(`【しんがり】 ${p.name} が殿(しんがり)を務め、残された味方の攻防がアップした！`);
+        state.shingariActive = true; 
+        await showMsg(`【しんがり】 ${p.name} が殿を務め、残された味方の攻防がアップした！`);
         updateUI();
     }
 
-    // 🌟 タクティカルモード中の処理
-    if (state.tacData && document.getElementById("view-tactical")) {
-        // PvP相手への通知
-        if (state.isPvP && conn) { conn.send({ type: 'TAC_ESCAPE_SUCCESS' }); }
-
+    // 3. タクティカル盤面での逃走（元の位置に戻る）
+    if (state.tacData && document.getElementById("view-tactical").classList.contains("active")) {
         state.tacData.turn = "player";
         state.tacData.selectedUnit = null;
         state.tacData.movedUnit = null;
-        state.tacData.hasEscapedThisRound = true; // 背水の陣
+        state.tacData.hasEscapedThisRound = true; // 背水の陣（同ターン逃走禁止）
 
         p.hasActed = false;
         p.justEscaped = true; // 再攻撃禁止
 
-        // 座標を戻す
         if (p.prevX !== undefined && p.prevY !== undefined) {
             p.x = p.prevX; p.y = p.prevY;
         }
@@ -11364,14 +11724,7 @@ window.processEscapeSuccess = async function (p, e) {
         return;
     }
 
-    // 🌟 通常のPvP（タクティカルではない）での逃走 ＝ 降参扱い
-    if (state.isPvP) {
-        await showMsg(`白旗をあげた！\nあなたの 敗北 です。`);
-        endPvP();
-        return;
-    }
-
-    // 🌟 通常のシナリオバトルの逃走
+    // 4. 通常のシナリオバトルの逃走
     if (state.battleFlags.scoutedList && state.battleFlags.scoutedList.length > 0) {
         state.battleWinNext = state.battleEscapeNext;
         openResultScreen(0, 0);
@@ -11640,7 +11993,7 @@ window.applyDamage = async function (attacker, defender, rawDamage, isPlayerAtta
             for (let t of burstTargets) {
                 if (t.hp > 0) {
                     // 自爆ダメージも再帰的に applyDamage を呼ぶことで連鎖自爆や食いしばりを処理できる
-                    await applyDamage(defender, t, burstDmg, !isPlayerAttack, false);
+                    await applyDamage(defender, t, burstDmg, state.player.includes(t), false);
                     hitAnyone = true;
                 }
             }
@@ -11768,29 +12121,20 @@ function appendEquipChangeButton(charIdx) {
     let maxEq = state.maxEquipCount || 1;
     for (let s = 0; s < maxEq; s++) {
         let opts = `<option value="none">-- 装備なし --</option>`;
+        
+        let availableEquips = [...state.ownedEquips];
+        if (p.equips && p.equips[s] && p.equips[s] !== "none") availableEquips.push(p.equips[s]);
+
         let equipCounts = {};
-        state.ownedEquips.forEach(eid => equipCounts[eid] = (equipCounts[eid] || 0) + 1);
+        availableEquips.forEach(eid => equipCounts[eid] = (equipCounts[eid] || 0) + 1);
 
         Object.keys(equipCounts).forEach(eid => {
-            let equippedByOthersCount = 0;
-            state.player.forEach((other, idx) => {
-                let otherEqs = Array.isArray(other.equips) ? other.equips : [other.equip];
-                if (idx !== charIdx) {
-                    equippedByOthersCount += otherEqs.filter(e => e === eid).length;
-                }
-            });
-
-            // 🌟 修正：自分が「他のスロット」に装備している数を計算
             let myOtherSlotsCount = p.equips ? p.equips.filter((e, eIdx) => eIdx !== s && e === eid).length : 0;
-            
-            // 重複禁止ルール
             let isBlockedByRule = (!state.enableMultiEquip && myOtherSlotsCount > 0);
-
-            // 🌟 修正：在庫が（他人の分 ＋ 自分の他のスロットの分）より多いか、今着けているものだけ表示
             let currentEquip = Array.isArray(p.equips) ? p.equips[s] : p.equip;
             
-            if ((equipCounts[eid] > (equippedByOthersCount + myOtherSlotsCount) && !isBlockedByRule) || currentEquip === eid) {
-                opts += `<option value="${eid}" ${currentEquip === eid ? 'selected' : ''}>${ITEMS[eid].name}</option>`;
+            if (!isBlockedByRule || currentEquip === eid) {
+                opts += `<option value="${eid}" ${currentEquip === eid ? 'selected' : ''}>${ITEMS[eid].name} (残${equipCounts[eid]})</option>`;
             }
         });
         eqHtml += `<select class="w-100 mb-1" style="font-size:12px;" onchange="changeEquipInCamp(${charIdx}, ${s}, this.value)">${opts}</select>`;
@@ -11799,36 +12143,21 @@ function appendEquipChangeButton(charIdx) {
     growList.insertAdjacentHTML('beforeend', eqHtml);
 }
 
-// キャンプ画面内での装備変更用関数
-window.changeEquipInCamp = function (pi, slot, eid) {
-    let p = state.player[pi];
-    if (!p.equips) p.equips = p.equip ? [p.equip] : [];
 
-    // 🌟 追加：エディタで重複が禁止されている場合のみ外す
-    if (!state.enableMultiEquip && eid !== "none") {
-        for (let i = 0; i < (state.maxEquipCount || 1); i++) {
-            if (i !== slot && p.equips[i] === eid) {
-                p.equips[i] = null;
-            }
-        }
+function checkCondition(currentVal, cond, targetVal) {
+    // 🌟 修正：値が存在しない(undefined)場合は数値の 0 として扱う
+    if (currentVal === undefined || currentVal === null) {
+        currentVal = 0;
     }
 
-    p.equips[slot] = (eid === "none") ? null : eid;
+    let cIsStr = (typeof currentVal === "string" && currentVal.trim() === "");
+    let tIsStr = (typeof targetVal === "string" && targetVal.trim() === "");
 
-    // 🌟 修正：無限増殖しないように再構築
-    renderGrowModal();
-    appendEquipChangeButton(pi);
-
-    showToast("装備を変更したお！", "info");
-};
-// 🌟 追加：フラグの条件式を判定するヘルパー関数
-function checkCondition(currentVal, cond, targetVal) {
-    if (!isNaN(currentVal) && !isNaN(targetVal)) {
+    if (!cIsStr && !tIsStr && !isNaN(currentVal) && !isNaN(targetVal)) {
         currentVal = Number(currentVal);
         targetVal = Number(targetVal);
     } else {
-        if (currentVal === undefined) currentVal = "false";
-        else currentVal = String(currentVal);
+        currentVal = String(currentVal);
         targetVal = String(targetVal);
     }
 
@@ -11841,7 +12170,6 @@ function checkCondition(currentVal, cond, targetVal) {
     if (cond === "<") return (currentVal < targetVal);
     return false;
 }
-
 // ==========================================
 // 🎲 汎用 1d10 ダイス判定UI（攻撃・逃走・スカウト共通）
 // ==========================================
@@ -11969,7 +12297,8 @@ window.hydrateData = function (data) {
         c.atkShock = cp(c.atkShock || 0, c.limit_atkShock);
         c.atkHeat = cp(c.atkHeat || 0, c.limit_atkHeat);
         c.atkElec = cp(c.atkElec || 0, c.limit_atkElec);
-
+c.dropItem = c.dropItem || "";
+        c.dropRate = Number(c.dropRate) || 0;
         // --- C. 現在値(Resources)の復旧と安全化 ---
         // HPの修復
         if (c.hp === undefined || isNaN(c.hp)) c.hp = c.maxHp;
@@ -12041,17 +12370,25 @@ window.hydrateData = function (data) {
     if (data.ENEMY_MASTER) Object.values(data.ENEMY_MASTER).forEach(e => fixEnemyAA(e));
 
     // 🌟 4. アイテムデータの補完
+    // 🌟 4. アイテムデータの補完
     if (data.ITEMS) {
         Object.values(data.ITEMS).forEach(i => {
             i.type = i.type || "consumable";
             i.price = Number(i.price) || 0;
             i.effectPower = Number(i.effectPower) || 0;
             i.range = Number(i.range) || 1;
-            const ATTRS =["fire", "elec", "ice", "wind", "water", "earth", "bomb", "dark", "wave", "light", "mystic", "spirit", "gravity", "fight", "grass"];
+
+            // 🌟 追加：MP/STの最大値アップを数値として補完
+            i.addMaxMp = Number(i.addMaxMp) || 0;
+            i.addMaxSt = Number(i.addMaxSt) || 0;
+
+            // 🌟 追加：貴重品フラグを確実に「真(true)か偽(false)」の状態にする
+            i.isGlobal = !!i.isGlobal; 
+
+            const ATTRS = ["fire", "elec", "ice", "wind", "water", "earth", "bomb", "dark", "wave", "light", "mystic", "spirit", "gravity", "fight", "grass"];
             ATTRS.forEach(attr => { i[`aff_${attr}`] = i[`aff_${attr}`] || "nm"; });
         });
     }
-
     // 🌟 5. 技データの補完
     if (data.SKILLS) {
         Object.values(data.SKILLS).forEach(s => {
@@ -12076,7 +12413,8 @@ window.hydrateData = function (data) {
     data.maxPlayerCount = Number(data.maxPlayerCount) || 50;
     data.battleMemberCount = Number(data.battleMemberCount) || 3;
     data.maxEquipCount = Number(data.maxEquipCount) || 1;
-     data.enableStatus = data.enableStatus !== undefined ? data.enableStatus : true;
+    data.enableStatus = data.enableStatus !== undefined ? data.enableStatus : true;
+    data.enableEvolution = data.enableEvolution !== undefined ? data.enableEvolution : true; // 🌟 追加
     data.inBattle = data.inBattle || false;
     data.isPrepPhase = data.isPrepPhase || false; // 🌟 追加：準備中フラグを復元
     return data;
@@ -12457,6 +12795,7 @@ window.getGameStateForSave = async function() {
         enableMultiEquip: state.enableMultiEquip,
         enableTension: state.enableTension,
         enableTactical: state.enableTactical,
+        enableEvolution: state.enableEvolution !== undefined ? state.enableEvolution : true, // 🌟 追加
         maxPlayerCount: state.maxPlayerCount,
         timeLimit: state.timeLimit, 
         turnLimit: state.turnLimit,
@@ -12518,10 +12857,46 @@ window.applySaveData = async function(loadedData) {
     state.enableAutoSave = loadedData.enableAutoSave !== undefined ? loadedData.enableAutoSave : true;
     
     // システム設定（ON/OFF系）の復元
-    const settings = ["enableLevelUp", "enableResistance", "enableAttribute", "enablePartyBattle", "enableAnalyze", "enableStatus", "enableMpSt", "skipHitDice", "enableItemUse", "enableEquipChange", "enableEscape", "enableScout", "enableTimeSystem", "enablePermaDeath", "enableSpReset", "enableMultiEquip", "enableTension", "enableTactical"];
+    const settings = ["enableLevelUp", "enableResistance", "enableAttribute", "enablePartyBattle", "enableAnalyze", "enableStatus", "enableMpSt", "skipHitDice", "enableItemUse", "enableEquipChange", "enableEscape", "enableScout", "enableTimeSystem", "enablePermaDeath", "enableSpReset", "enableMultiEquip", "enableTension", "enableTactical", "enableEvolution"];
     settings.forEach(k => { state[k] = loadedData[k] !== undefined ? loadedData[k] : state[k]; });
 
     // システム設定（数値系）の復元
     const nums = ["maxLevel", "maxItemCount", "maxSkills", "maxPlayerCount", "timeLimit", "turnLimit", "battleMemberCount", "maxEquipCount", "maxPartyCost"];
     nums.forEach(k => { state[k] = loadedData[k] || 0; });
+};
+window.cleanUpCharacterBattleFlags = function(char) {
+    if (!char) return;
+    char.status = "none";
+    char.statusTurn = 0;
+    delete char.statusAppliedTurn;
+    char.tension = 0;
+    delete char.tempTensionForCalc;
+    if (typeof initResistance === 'function') initResistance(char, state.player.includes(char));
+    char.isFirstTurn = true;
+    char.turnInBattle = 0;
+    char.rechargeTurn = 0;
+    char.chargeSkillId = null;
+    char.hasDoubleStrike = false;
+    char.hasBursted = false;
+    char.hasBeenCountered = false;
+    char.guaranteeHit = false;
+    char.transformCrit = false;
+    char.guaranteeDodge = false;
+    char.counterActive = false;
+    char.statBuff = 0;
+    char.resUpShock = false;
+    char.resUpHeat = false;
+    char.resUpElec = false;
+    char.tempEmotion = null;
+    char.critCount = 0;
+    char.hitCombo = 0;
+    char.lastUsedSkill = null;
+    char.skillUseCount = 0;
+    char.x = -1;
+    char.y = -1;
+    char.hasActed = false;
+    char.justEscaped = false;
+    delete char.prevX;
+    delete char.prevY;
+    delete char.turnDice;
 };
