@@ -1595,3 +1595,56 @@ button i, button span {
         transform: scale(0.75);
     }
 }
+
+/* ==========================================
+   親切設計：ツールチップ（説明表示）UI
+   ========================================== */
+.tooltip-container {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+}
+
+.tooltip-text {
+    visibility: hidden;
+    width: max-content;
+    max-width: 200px;
+    background-color: rgba(26, 32, 44, 0.95);
+    color: #fff;
+    text-align: left;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.4;
+    font-weight: normal;
+    border: 1px solid #cbd5e0;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    
+    /* 吹き出しを上に出す */
+    position: absolute;
+    z-index: 10000;
+    bottom: 125%; 
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+/* 吹き出しの尻尾 */
+.tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: rgba(26, 32, 44, 0.95) transparent transparent transparent;
+}
+
+.tooltip-container:hover .tooltip-text,
+.tooltip-container:active .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
