@@ -1754,36 +1754,15 @@ function getEditorJSONData() {
 
                 // ① getEditorJSONData 内の type === "system_set" の保存部分
                 if (type === "system_set") {
-                    stepObj.enableLevelUp = getBool(0);
-                    stepObj.enableResistance = getBool(1);
-                    stepObj.enableAttribute = getBool(2);
-                    stepObj.enableStatus = getBool(3);
-                    stepObj.enablePartyBattle = getBool(4);
-                    stepObj.enableTactical = getBool(5);
-                    stepObj.enableAnalyze = getBool(6);
-                    stepObj.skipHitDice = getBool(7);
-                    stepObj.enableItemUse = getBool(8);
-                    stepObj.enableEquipChange = getBool(9);
-                    stepObj.enableEscape = getBool(10);
-                    stepObj.enableScout = getBool(11);
-                    stepObj.enableTimeSystem = getBool(12);
-                    stepObj.enablePermaDeath = getBool(13);
-                    stepObj.enableSpReset = getBool(14);
-                    stepObj.enableMultiEquip = getBool(15);
-                    stepObj.enableTension = getBool(16);
-                    stepObj.enableMpSt = getBool(17); 
-                    stepObj.enableEvolution = getBool(18); // 🌟 追加
-                    
-                    // 数値入力は19番目からスタートにズレる
-                    stepObj.maxLevel = getNum(19, 0); 
-                    stepObj.maxItemCount = getNum(20, 0);
-                    stepObj.maxSkills = getNum(21, 0); 
-                    stepObj.maxPlayerCount = getNum(22, 50);
-                    stepObj.battleMemberCount = getNum(23, 3); 
-                    stepObj.maxEquipCount = getNum(24, 1); 
-                    stepObj.timeLimit = getNum(25, 0); 
-                    stepObj.turnLimit = getNum(26, 0);
-                    stepObj.maxPartyCost = getNum(27, 0);
+                    inputs.forEach(inp => {
+                        const key = inp.getAttribute("data-key");
+                        if (!key) return;
+                        if (inp.type === "checkbox") {
+                            stepObj[key] = inp.checked;
+                        } else {
+                            stepObj[key] = inp.value !== "" ? Number(inp.value) : 0;
+                        }
+                    });
                 }
 
 // ② getEditorJSONData 内の skillBlocks（技）の保存部分
@@ -1804,89 +1783,78 @@ function getEditorJSONData() {
                 }
 
                  else if (type === "battle") { 
-                    stepObj.enemies = getArr(0, ["custom_enemy"]);
-                    stepObj.initiative = getVal(1, "stats");
-                    stepObj.mapData = getVal(2, "");
-                    stepObj.win = getVal(3, ""); 
-                    stepObj.lose = getVal(4, "start"); 
-                    stepObj.draw = getVal(5, ""); 
-                    stepObj.escape = getVal(6, ""); 
-                    stepObj.scout = getVal(7, ""); 
+                    inputs.forEach(inp => {
+                        const key = inp.getAttribute("data-key");
+                        if (!key) return;
+                        if (key === "enemies") {
+                            stepObj.enemies = inp.value ? inp.value.split(",").map(s => s.trim()).filter(s => s) : ["custom_enemy"];
+                        } else {
+                            stepObj[key] = inp.value.trim();
+                        }
+                    });
                 }
                 else if (type === "jump") { 
-                    stepObj.next = getVal(0, sceneId); 
+                    const nextInp = block.querySelector('.step-data[data-key="next"]');
+                    stepObj.next = nextInp ? nextInp.value.trim() : sceneId; 
                 }
                 else if (type === "shop") { 
-                    stepObj.items = getArr(0, ["heal_1"]); 
+                    const itemsInp = block.querySelector('.step-data[data-key="items"]');
+                    stepObj.items = itemsInp && itemsInp.value ? itemsInp.value.split(",").map(s => s.trim()).filter(s => s) : ["heal_1"]; 
                 }
                 else if (type === "give") { 
-                    stepObj.target = getVal(0, "money"); 
-                    stepObj.amount = getNum(1, 1); 
+                    const targetInp = block.querySelector('.step-data[data-key="target"]');
+                    const amtInp = block.querySelector('.step-data[data-key="amount"]');
+                    stepObj.target = targetInp ? targetInp.value.trim() : "money"; 
+                    stepObj.amount = amtInp && amtInp.value !== "" ? Number(amtInp.value) : 1; 
                 }
-                else if (type === "flag_set") { 
-                    stepObj.targetId = getVal(0); 
-                    stepObj.flagName = getVal(1, "dummy_flag"); 
-                    stepObj.operator = getVal(2, "="); 
-                    stepObj.flagValue = getVal(3, "1"); 
-                }
-                else if (type === "flag_check") { 
-                    stepObj.targetId = getVal(0); 
-                    stepObj.flagName = getVal(1, "dummy_flag"); 
-                    stepObj.condition = getVal(2, "=="); 
-                    stepObj.flagValue = getVal(3, "1"); 
-                    stepObj.true_next = getVal(4, sceneId); 
-                    stepObj.false_next = getVal(5, sceneId); 
+                else if (type === "flag_set" || type === "flag_check" || type === "job_change" || type === "join_party" || type === "bg_set") { 
+                    inputs.forEach(inp => {
+                        const key = inp.getAttribute("data-key");
+                        if (!key) return;
+                        stepObj[key] = inp.value.trim();
+                    });
                 }
                 else if (type === "stat_change") { 
-                    stepObj.targetId = getVal(0, "all"); 
-                    stepObj.mode = getVal(1, "recover"); // 🌟 追加：モード
-                    stepObj.statKey = getVal(2, "hp"); 
-                    let amt = getVal(3, "10");
-                    stepObj.amount = isNaN(Number(amt)) ? amt : Number(amt);
-                    stepObj.msg = getVal(4); 
-                }else if (type === "job_change") {
-                    stepObj.targetId = getVal(0, "");
-                    stepObj.jobId = getVal(1, "");
-                }
-                else if (type === "join_party") {
-                    // 番号(0, 1)ではなく、設定した data-key を直接探して読み取る
-                    const idInp = block.querySelector('.step-data[data-key="targetId"]');
-                    const msgInp = block.querySelector('.step-data[data-key="msg"]');
-                    stepObj.targetId = idInp ? idInp.value.trim() : "";
-                    stepObj.msg = msgInp ? msgInp.value.trim() : "";
+                    inputs.forEach(inp => {
+                        const key = inp.getAttribute("data-key");
+                        if (!key) return;
+                        if (key === "amount") {
+                            let amt = inp.value.trim();
+                            stepObj[key] = isNaN(Number(amt)) || amt === "" ? amt : Number(amt);
+                        } else {
+                            stepObj[key] = inp.value.trim();
+                        }
+                    });
                 }
                 else if (type === "minigame") { 
-                    stepObj.gameType = getVal(0, "slot"); 
-                    stepObj.mgTitle = getVal(1);
-                    stepObj.betType = getVal(2, "money"); 
-                    stepObj.targetId = getVal(3); 
-                    stepObj.betAmount = getNum(4, 0); 
-                    stepObj.playLimit = getNum(5, 0); 
-                    stepObj.nextScene = getVal(6, sceneId); 
-                    stepObj.failScene = getVal(7, sceneId); 
-                    stepObj.requireSuccess = getBool(8, false); 
-                    stepObj.difficulty = getNum(9, 3); 
-                    stepObj.rewards = getVal(10); 
+                    inputs.forEach(inp => {
+                        const key = inp.getAttribute("data-key");
+                        if (!key) return;
+                        if (inp.type === "checkbox") {
+                            stepObj[key] = inp.checked;
+                        } else if (["betAmount", "playLimit", "difficulty"].includes(key)) {
+                            stepObj[key] = inp.value !== "" ? Number(inp.value) : 0;
+                        } else {
+                            stepObj[key] = inp.value.trim();
+                        }
+                    });
                 }
                 else if (type === "pass_time") { 
-                    stepObj.amount = getNum(0, 1); 
-                    stepObj.msg = getVal(1); 
+                    const amtInp = block.querySelector('.step-data[data-key="amount"]');
+                    const msgInp = block.querySelector('.step-data[data-key="msg"]');
+                    stepObj.amount = amtInp && amtInp.value !== "" ? Number(amtInp.value) : 1; 
+                    stepObj.msg = msgInp ? msgInp.value.trim() : ""; 
                 }
                 else if (type === "craft") { 
-                    stepObj.title = getVal(0, "アトリエ"); 
-                    stepObj.category = getVal(1); 
-                    stepObj.targetItem = getVal(2); 
-                    stepObj.targetCount = getNum(3, 1); 
-                    stepObj.trueNext = getVal(4, sceneId); 
-                    stepObj.falseNext = getVal(5, sceneId); 
-                }
-                else if (type === "bg_set") { 
-                    stepObj.preset = getVal(0, "auto"); 
-                    stepObj.custom_bg = getVal(1, "auto"); 
-                    stepObj.textColor = getVal(2, "auto"); 
-                    stepObj.msgBg = getVal(3, "rgba(0,0,0,0.85)");
-                    stepObj.msgText = getVal(4, "#ffffff");
-                    stepObj.msgSpeaker = getVal(5, "#ecc94b");
+                    inputs.forEach(inp => {
+                        const key = inp.getAttribute("data-key");
+                        if (!key) return;
+                        if (key === "targetCount") {
+                            stepObj[key] = inp.value !== "" ? Number(inp.value) : 1;
+                        } else {
+                            stepObj[key] = inp.value.trim();
+                        }
+                    });
                 }
                 else if (type === "dice_choice") { 
                     stepObj.speaker = getVal(0, "システム"); 
@@ -3721,7 +3689,13 @@ window.refreshFlowchartData = function () {
             if (step.type === 'map' && step.events) {
                 step.events.split(",").forEach(e => {
                     let parts = e.split(":");
-                    if (parts.length >= 2) addEdge(parts[1].trim(), `MAP: ${parts[0].trim()}`);
+                    if (parts.length >= 2) {
+                        let dest = parts[1].trim();
+                        if (dest.includes('%')) {
+                            dest = dest.split('%')[1].trim();
+                        }
+                        addEdge(dest, `MAP: ${parts[0].trim()}`);
+                    }
                 });
             }
         });
@@ -3840,7 +3814,14 @@ window.openFlowchart = function () {
                 if (step.type === 'dice_choice' && Array.isArray(step.options)) step.options.forEach(o => addEdge(o.next, `${o.min}〜${o.max}`));
                 if (step.type === 'flag_check') { addEdge(step.true_next, '条件クリア', '#38a169'); addEdge(step.false_next, '条件未達', '#e53e3e'); }
                 if (step.type === 'battle') { addEdge(step.win, '勝利', '#3182ce'); addEdge(step.lose, '敗北', '#e53e3e'); addEdge(step.draw, '相打ち', '#805ad5'); addEdge(step.escape, '逃走', '#d69e2e'); addEdge(step.scout, '捕獲', '#38a169'); }
-                if (step.type === 'map' && step.events) step.events.split(",").forEach(e => { let parts = e.split(":"); if (parts.length >= 2) addEdge(parts[1].trim(), `MAP: ${parts[0].trim()}`); });
+                if (step.type === 'map' && step.events) step.events.split(",").forEach(e => {
+                    let parts = e.split(":");
+                    if (parts.length >= 2) {
+                        let dest = parts[1].trim();
+                        if (dest.includes('%')) dest = dest.split('%')[1].trim();
+                        addEdge(dest, `MAP: ${parts[0].trim()}`);
+                    }
+                });
                 
                 // ▼ここを追加（ミニゲームとクラフトの矢印を生成する）
                 if (step.type === 'minigame') { addEdge(step.nextScene, '完了', '#3182ce'); addEdge(step.failScene, '失敗', '#e53e3e'); }
@@ -4260,30 +4241,17 @@ function fillStepInputs(step, inputs) {
     if (!step || !inputs || inputs.length === 0) return;
 
     if (step.type === "system_set") {
-        const boolKeys =[
-            "enableLevelUp", "enableResistance", "enableAttribute", "enableStatus", 
-            "enablePartyBattle", "enableTactical", "enableAnalyze", "skipHitDice", 
-            "enableItemUse", "enableEquipChange", "enableEscape", "enableScout", 
-            "enableTimeSystem", "enablePermaDeath", "enableSpReset", "enableMultiEquip", 
-            "enableTension", "enableMpSt", "enableEvolution" // 🌟 追加
-        ];
-
-        boolKeys.forEach((key, i) => {
-            // 新規追加された項目でデータがない場合はデフォルトを true にする
-            let defValue = (key === "enableEvolution") ? true : false;
-            if (inputs[i]) inputs[i].checked = step[key] !== undefined ? step[key] : defValue;
+        inputs.forEach(inp => {
+            const key = inp.getAttribute("data-key");
+            if (!key) return;
+            if (inp.type === "checkbox") {
+                const defaultTrueKeys = ["enableLevelUp", "enableResistance", "enableAttribute", "enableStatus", "enableAnalyze", "enableItemUse", "enableEquipChange", "enableEscape", "enableScout", "enableTimeSystem", "enableSpReset", "enableMpSt", "enableEvolution"];
+                const defVal = defaultTrueKeys.includes(key);
+                inp.checked = step[key] !== undefined ? !!step[key] : defVal;
+            } else {
+                inp.value = step[key] !== undefined ? step[key] : (key === "maxPlayerCount" ? 50 : (key === "battleMemberCount" ? 3 : (key === "maxEquipCount" ? 1 : 0)));
+            }
         });
-
-        // 🌟 インデックスのズレを調整
-        if (inputs[19]) inputs[19].value = step.maxLevel || 0;
-        if (inputs[20]) inputs[20].value = step.maxItemCount || 0;
-        if (inputs[21]) inputs[21].value = step.maxSkills || 0;
-        if (inputs[22]) inputs[22].value = step.maxPlayerCount || 50;
-        if (inputs[23]) inputs[23].value = step.battleMemberCount || 3; 
-        if (inputs[24]) inputs[24].value = step.maxEquipCount || 1; 
-        if (inputs[25]) inputs[25].value = step.timeLimit || 0;
-        if (inputs[26]) inputs[26].value = step.turnLimit || 0;
-        if (inputs[27]) inputs[27].value = step.maxPartyCost || 0;
     }
     // 🌟 修正：メッセージ系のAA復元処理のバグを修正
     else if (step.type === "msg") { 
@@ -4306,92 +4274,49 @@ function fillStepInputs(step, inputs) {
     }
 
     else if (step.type === "battle") { 
-        if (inputs[0]) inputs[0].value = step.enemies ? step.enemies.join(",") : ""; 
-        if (inputs[1]) inputs[1].value = step.initiative || "stats"; 
-        if (inputs[2]) inputs[2].value = step.mapData || "";
-        if (inputs[3]) inputs[3].value = step.win || ""; 
-        if (inputs[4]) inputs[4].value = step.lose || ""; 
-        if (inputs[5]) inputs[5].value = step.draw || ""; 
-        if (inputs[6]) inputs[6].value = step.escape || ""; 
-        if (inputs[7]) inputs[7].value = step.scout || ""; 
+        inputs.forEach(inp => {
+            const key = inp.getAttribute("data-key");
+            if (!key) return;
+            if (key === "enemies") inp.value = step.enemies ? step.enemies.join(",") : "";
+            else inp.value = step[key] !== undefined ? step[key] : (key === "initiative" ? "stats" : "");
+        });
     }
-    else if (step.type === "jump") { if (inputs[0]) inputs[0].value = step.next || ""; }
-    else if (step.type === "shop") { if (inputs[0]) inputs[0].value = step.items ? step.items.join(",") : ""; }
-    else if (step.type === "give") { 
-        if (inputs[0]) inputs[0].value = step.target || ""; 
-        if (inputs[1]) inputs[1].value = step.amount || 1; 
+    else if (step.type === "jump") { 
+        const inp = inputs[0]; if (inp) inp.value = step.next || ""; 
     }
-    else if (step.type === "flag_set") { 
-        if (inputs[0]) inputs[0].value = step.targetId || ""; 
-        if (inputs[1]) inputs[1].value = step.flagName || ""; 
-        if (inputs[2]) inputs[2].value = step.operator || "="; 
-        if (inputs[3]) inputs[3].value = step.flagValue || ""; 
+    else if (step.type === "shop") { 
+        const inp = inputs[0]; if (inp) inp.value = step.items ? step.items.join(",") : ""; 
     }
-    else if (step.type === "flag_check") { 
-        if (inputs[0]) inputs[0].value = step.targetId || ""; 
-        if (inputs[1]) inputs[1].value = step.flagName || ""; 
-        if (inputs[2]) inputs[2].value = step.condition || "=="; 
-        if (inputs[3]) inputs[3].value = step.flagValue || ""; 
-        if (inputs[4]) inputs[4].value = step.true_next || ""; 
-        if (inputs[5]) inputs[5].value = step.false_next || ""; 
-    }
-    else if (step.type === "stat_change") { 
-        if (inputs[0]) inputs[0].value = step.targetId || "";
-        if (inputs[1]) inputs[1].value = step.mode || "recover"; 
-        
-        if (inputs[2]) inputs[2].value = step.statKey || "hp"; 
-        if (inputs[3]) inputs[3].value = step.amount !== undefined ? step.amount : 0; 
-        if (inputs[4]) inputs[4].value = step.msg || ""; 
-    }
-    else if (step.type === "job_change") {
-        if (inputs[0]) inputs[0].value = step.targetId || "";
-        if (inputs[1]) inputs[1].value = step.jobId || "";
-    }
-    else if (step.type === "join_party") {
-        if (inputs[0]) inputs[0].value = step.targetId || "";
-        if (inputs[1]) inputs[1].value = step.msg || "";
+    else if (step.type === "give" || type === "flag_set" || type === "flag_check" || type === "job_change" || type === "join_party" || type === "pass_time" || type === "craft") { 
+        inputs.forEach(inp => {
+            const key = inp.getAttribute("data-key");
+            if (!key) return;
+            inp.value = step[key] !== undefined ? step[key] : "";
+        });
     }
     else if (step.type === "minigame") { 
-        if (inputs[0]) inputs[0].value = step.gameType || "slot"; 
-        if (inputs[1]) inputs[1].value = step.mgTitle || "";
-        if (inputs[2]) inputs[2].value = step.betType || "money"; 
-        if (inputs[3]) inputs[3].value = step.targetId || ""; 
-        if (inputs[4]) inputs[4].value = step.betAmount || 0; 
-        if (inputs[5]) inputs[5].value = step.playLimit || 0; 
-        if (inputs[6]) inputs[6].value = step.nextScene || ""; 
-        if (inputs[7]) inputs[7].value = step.failScene || ""; 
-        if (inputs[8]) inputs[8].checked = step.requireSuccess || false; 
-        if (inputs[9]) inputs[9].value = step.difficulty || 3; 
-        if (inputs[10]) inputs[10].value = step.rewards || ""; 
+        inputs.forEach(inp => {
+            const key = inp.getAttribute("data-key");
+            if (!key) return;
+            if (inp.type === "checkbox") inp.checked = !!step[key];
+            else inp.value = step[key] !== undefined ? step[key] : (key === "gameType" ? "slot" : (key === "difficulty" ? 3 : ""));
+        });
         if (inputs[0]) editorUpdateMinigameUI(inputs[0]); 
     }
-    else if (step.type === "pass_time") { 
-        if (inputs[0]) inputs[0].value = step.amount || 1; 
-        if (inputs[1]) inputs[1].value = step.msg || ""; 
-    }
-    else if (step.type === "craft") { 
-        if (inputs[0]) inputs[0].value = step.title || "アトリエ"; 
-        if (inputs[1]) inputs[1].value = step.category || ""; 
-        if (inputs[2]) inputs[2].value = step.targetItem || ""; 
-        if (inputs[3]) inputs[3].value = step.targetCount || 1; 
-        if (inputs[4]) inputs[4].value = step.trueNext || ""; 
-        if (inputs[5]) inputs[5].value = step.falseNext || ""; 
-    }
     else if (step.type === "bg_set") { 
-        if (inputs[0]) {
-            inputs[0].value = step.preset || "auto"; 
-            const root = inputs[0].closest('.step-body');
-            const pickers = root.querySelectorAll('input[type="color"]');
-            if(pickers[0] && step.custom_bg && step.custom_bg.startsWith("#")) pickers[0].value = step.custom_bg;
-            if(pickers[1] && step.msgBg && step.msgBg.startsWith("#")) pickers[1].value = step.msgBg;
-            if(pickers[2] && step.msgText && step.msgText.startsWith("#")) pickers[2].value = step.msgText;
-            if(pickers[3] && step.msgSpeaker && step.msgSpeaker.startsWith("#")) pickers[3].value = step.msgSpeaker;
-            if (inputs[1]) { inputs[1].value = step.custom_bg || "auto"; inputs[1].disabled = (step.preset !== "custom"); }
-            if (inputs[2]) inputs[2].value = step.textColor || "auto"; 
-            if (inputs[3]) inputs[3].value = step.msgBg || "rgba(0,0,0,0.85)"; 
-            if (inputs[4]) inputs[4].value = step.msgText || "#ffffff"; 
-            if (inputs[5]) inputs[5].value = step.msgSpeaker || "#ecc94b";
-        }
+        inputs.forEach(inp => {
+            const key = inp.getAttribute("data-key");
+            if (!key) return;
+            inp.value = step[key] !== undefined ? step[key] : (key === "preset" || key === "custom_bg" || key === "textColor" ? "auto" : (key === "msgBg" ? "rgba(0,0,0,0.85)" : (key === "msgSpeaker" ? "#ecc94b" : "#ffffff")));
+        });
+        const root = inputs[0].closest('.step-body');
+        const pickers = root.querySelectorAll('input[type="color"]');
+        if (pickers[0] && step.custom_bg && step.custom_bg.startsWith("#")) pickers[0].value = step.custom_bg;
+        if (pickers[1] && step.msgBg && step.msgBg.startsWith("#")) pickers[1].value = step.msgBg;
+        if (pickers[2] && step.msgText && step.msgText.startsWith("#")) pickers[2].value = step.msgText;
+        if (pickers[3] && step.msgSpeaker && step.msgSpeaker.startsWith("#")) pickers[3].value = step.msgSpeaker;
+        const customBgInp = root.querySelector('[data-key="custom_bg"]');
+        if (customBgInp) customBgInp.disabled = (step.preset !== "custom");
     }
     else if (step.type === "dice_choice") { 
         if (inputs[0]) inputs[0].value = step.speaker || ""; 

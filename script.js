@@ -747,8 +747,9 @@ window.expandVariables = async function (str) {
         if (matchArray) {
             const isPlayer = matchArray[1].toLowerCase() === 'p';
             const index = parseInt(matchArray[2], 10) - 1;
+            const statKey = matchArray[3];
             const targetTeam = isPlayer ? state.player : state.enemy;
-            if (targetTeam[index] && targetTeam[index][stat] !== undefined) return targetTeam[index][stat];
+            if (targetTeam[index] && targetTeam[index][statKey] !== undefined) return targetTeam[index][statKey];
         }
 
         // 5. 個別キャラのID指定 (例: yaruo.affection)
@@ -2396,7 +2397,12 @@ function getStats(c, isPlayer = false, opponentTrait = "none", includeTempBuff =
     // 🌟 特性無効化（かたやぶり等）の判定
     let myTrait = c.trait || "none";
     if (opponentTrait === "mold_breaker") {
-        const ignoreTraits = ["metal_body", "sturdy", "levitate", "magic_bounce", "ultra_body", "wonder_guard", "hard_body", "evasion_step", "gamble_body", "iron_wall", "pressure", "triple_mirror", "status_mirror", "break_mirror", "gourmet_body", "energy_convert", "overflow", "reverse_affinity"];
+        const ignoreTraits = [
+            "metal_body", "sturdy", "levitate", "magic_bounce", "ultra_body", "wonder_guard",
+            "hard_body", "evasion_step", "gamble_body", "iron_wall", "pressure", "triple_mirror",
+            "status_mirror", "break_mirror", "gourmet_body", "energy_convert", "overflow",
+            "reverse_affinity", "unyielding_heart", "perfect_guard", "def_gamble", "down_body"
+        ];
         if (ignoreTraits.includes(myTrait)) myTrait = "none";
     }
 
@@ -2455,6 +2461,7 @@ window.calculateDamage = function (attacker, defender, skill, isCrit) {
     if (state.enableResistance && defender.breakHeat > 0) defVal = 0; // 熱量ブレイクで防御0
     if (defender.status === "frostbite") defVal = Math.floor(defVal / 2); // 凍傷で防御半減
     if (defender.status === "harden") defVal *= 2; // 硬化で防御2倍
+    defVal = Math.max(0, defVal); // 🌟 防御力がマイナスになってダメージが異常増殖するのを防止
 
     let atkVal = atkStats.dmg + Math.floor(atkStats.tech / 10);
 
@@ -2948,6 +2955,8 @@ window.updateUI = async function () {
     let pEqList = Array.isArray(p.equips) ? p.equips : (p.equip ? [p.equip] :[]);
     let eqNames = pEqList.map(eid => (eid && ITEMS[eid]) ? ITEMS[eid].name : "").filter(n => n).join("/");
     if (!eqNames) eqNames = "なし";
+
+    let pTenHtml = state.enableTension && p.tension !== 0 ? `<div style="color:#dd6b20; font-weight:bold; height:12px; line-height:12px; font-size:11px; margin-bottom:1px;">🔥${p.tension}</div>` : `<div style="height:1px;"></div>`;
 
     const buildResourceRow = (char) => {
         // 🌟 追加：システムがOFFなら空っぽの空間を返して非表示にする
@@ -3517,13 +3526,12 @@ window.executeAction = async function (action, param) {
         await showMsg(`${p.name} は 技の反動で動けない！`);
         p.rechargeTurn--;
         await wait(800);
-    } else
-        if (action === "change") {
-            await showMsg(`${p.name} もどれ！<br>ゆけっ！ ${state.player[param].name}！`);
-            state.activeP = param;
-            state.player[param].isFirstTurn = true;
-            state.player[param].turnInBattle = 0;
-            state.player[param].turnDice = undefined;
+    } else if (action === "change") {
+        await showMsg(`${p.name} もどれ！<br>ゆけっ！ ${state.player[param].name}！`);
+        state.activeP = param;
+        state.player[param].isFirstTurn = true;
+        state.player[param].turnInBattle = 0;
+        state.player[param].turnDice = undefined;
 
             // 🌟 修正：タクティカルの決闘中（state.tacDataが存在する時）は、
             // 「わざわい」の再発動を禁止する！（盤面登場時に1回だけ発動させるため）
@@ -4672,6 +4680,12 @@ if (!state.enablePartyBattle) {
             if (attacker.hp <= 0) {
                 break;
             }
+
+            // 全滅チェック：ターゲット全員が倒れている場合は残りの処理を中断
+            if (targetList.every(t => !t || t.hp <= 0)) {
+                break;
+            }
+
             // ▼▼▼ 以下は、相手が生きている場合のみ処理される部分 ▼▼▼
             if (def.hp > 0) {
                 // 弱点保険系（on_weak）
@@ -4798,13 +4812,14 @@ if (!isStatusOverwritable(def.status)) continue;
                         await wait(800); await showMsg(`${def.name} は 装備で 【${STATUS_NAMES[inflictStatus]}】を 防いだ！`);
                     } else if (inflictStatus === "doom" && def.isBoss === "true") {
                         await wait(800); await showMsg(`しかし ${def.name} に 破滅は 効かない！`);
-                    if (def.status !== "doom") {
-    def.status = inflictStatus; 
-    def.statusTurn = 4;
-    def.statusAppliedTurn = state.turnCount; // 🌟 追加：付与されたターンを記録
-    await wait(800); 
-    await showMsg(`${def.name} は 【${STATUS_NAMES[inflictStatus]}】状態に！`);
-}
+                    } else {
+                        if (def.status !== "doom") {
+                            def.status = inflictStatus; 
+                            def.statusTurn = 4;
+                            def.statusAppliedTurn = state.turnCount;
+                            await wait(800); 
+                            await showMsg(`${def.name} は 【${STATUS_NAMES[inflictStatus]}】状態に！`);
+                        }
 
                         if (currentDefTrait === "resonance" && state.enablePartyBattle) {
                             let allies = isPlayerAttack ? state.enemy : state.player.slice(0, state.battleMemberCount || 3);
@@ -5897,32 +5912,19 @@ if (act.action === 'attack' && act.param === 'normal' && actor.trait === "spread
             } else {
                 await showMsg(`ダメだお！ ${mainTarget.name} は こちらを警戒している！`); await wait(800);
 
-                // 🌟 修正：パーティバトルでも、ダイスを振らずに「確定ヒット」の反撃をさせる
                 if (mainTarget.hp > 0 && actor.hp > 0) {
                     let eSkillId = getEnemyAction(mainTarget);
                     if (eSkillId === "nothing") {
                         await showMsg(`${mainTarget.name} は 警戒しながら 様子を見ている……`); await wait(800);
                     } else {
-                        let skill = (eSkillId === "normal") ? null : SKILLS[eSkillId];
-                        
-                        // 反撃なのでターゲットは「スカウトしてきた相手(actor)」に固定
-                        mainTarget.guaranteeHit = true; 
-                        
                         await showMsg(`＞＞ ${mainTarget.name} の 怒りの反撃！ ＜＜`); await wait(800);
+                        let eStats = getStats(mainTarget, false);
+                        let aStats = getStats(actor, true);
+                        let dmg = Math.max(1, (eStats.dmg + Math.floor(eStats.tech / 10)) - (aStats.def + Math.floor(aStats.exp / 10)));
+                        dmg *= 2; 
                         
-                        // isCounterフラグ(第4引数)を true にして、戦闘ダイスを省略する
-                        if (mainTarget.hp > 0 && actor.hp > 0) {
-                    await showMsg(`＞＞ ${mainTarget.name} の 怒りの反撃！ ＜＜`); await wait(800);
-                    // 🌟 修正：executeAttackSequence はキューを破壊するため、直接ダメージ計算に流す
-                    let eStats = getStats(mainTarget, false);
-                    let aStats = getStats(actor, true);
-                    // 単純な物理攻撃として処理（怒りなので2倍）
-                    let dmg = Math.max(1, (eStats.dmg + Math.floor(eStats.tech/10)) - (aStats.def + Math.floor(aStats.exp/10)));
-                    dmg *= 2; 
-                    
-                    await applyDamage(mainTarget, actor, dmg, false, false);
-                    if (actor.hp <= 0) await showMsg(`${actor.name} は たおれた！`);
-                }
+                        await applyDamage(mainTarget, actor, dmg, false, false);
+                        if (actor.hp <= 0) await showMsg(`${actor.name} は たおれた！`);
                     }
                 }
             }
@@ -9416,7 +9418,7 @@ async function executePokerDraw() {
     document.getElementById("btn-mg-leave").disabled = false;
 
     // 🌟 修正：回数制限が残っており、かつお金（コスト）が足りていればボタンを復活させる！
-    if ((mgState.step.playLimit === 0 || mgState.playsLeft > 0) && getMinigameCurrency() >= mgState.step.betAmount) {
+    if ((mgState.step.playLimit === 0 || mgState.playsLeft > 0) && getMinigameCurrency(mgState.step) >= mgState.step.betAmount) {
         playBtn.disabled = false;
     }
 
@@ -11958,6 +11960,11 @@ window.applyDamage = async function (attacker, defender, rawDamage, isPlayerAtta
         resizeAllAAs(); // 🌟 追加：ダメージ顔になった瞬間にリサイズ！
         await showMsg(`${defender.name} に ${actualDmg} の ダメージ！`);
         if (isSturdyActivated) { await showMsg(`${defender.name} の がんじょう が発動！`); }
+    }
+
+    const atkTrait = attacker.trait || "none";
+    if (atkTrait === "mold_breaker") {
+        currentDefTrait = "none";
     }
 
     // --- 死亡時（HP0）の共通処理 ---

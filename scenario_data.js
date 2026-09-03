@@ -35,8 +35,10 @@ const SCENARIO = {
         { type: "msg", speaker: "やらない子", aa: "character.original.yaranaiko.笑顔", text: "やる夫くん、おはよう！ 釣りのやり方は分かる？ タイミングよくボタンを押すだけよ。" },
         { type: "msg", speaker: "やる夫", aa: "character.original.yaruo.驚き", text: "やらない子ちゃん！ 俄然やる気が出てきたお、川へ行くお！" },
         
-        { type: "minigame", gameType: "gauge", mgTitle: "🎣 釣り", betType: "hp", betAmount: 0, playLimit: 1, targetId: "yaruo", nextScene: "tut_craft", failScene: "tut_fishing_fail", requireSuccess: true, difficulty: 2, rewards: "heal_1" },
-        
+        { type: "minigame", gameType: "gauge", mgTitle: "🎣 釣り", betType: "hp", betAmount: 0, playLimit: 1, targetId: "yaruo", nextScene: "tut_fishing_success", failScene: "tut_fishing_fail", requireSuccess: true, difficulty: 2, rewards: "heal_1" }
+    ],
+
+    "tut_fishing_success": [
         { type: "msg", speaker: "やらない夫", aa: "character.original.yaranaio.笑顔", text: "よし、見事に『薬草』を釣り上げたな。\n画面右上の【カレンダー】を見てみろ。朝から【昼】に時間が進んでいるはずだ。" },
         { type: "pass_time", amount: 1, msg: "（釣りを終えると、お昼になっていた…）" },
         { type: "jump", next: "tut_craft" }

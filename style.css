@@ -590,6 +590,7 @@ pre, .aa-display, .aa-preview, .battler-aa pre, .p-aa pre {
     transition: transform 0.2s;
     z-index: 1; 
     height: max-content; /* 中身の分だけ高さをとる */
+    overflow: visible !important;
 }
 .p-aa {
     flex: 0 0 140px; /* 高さを140pxに完全固定（沈没防止） */
